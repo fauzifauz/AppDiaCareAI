@@ -13,6 +13,7 @@ import 'screens/splash/splash_screen.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/auth/verify_email_screen.dart';
 import 'services/fcm_service.dart';
+import 'services/tflite_prediction_service.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
@@ -25,8 +26,14 @@ void main() async {
 
     // Initialize FCM after Firebase is ready
     await FcmService.instance.initialize();
+
+    // Request OS notification permission at the very start of app launch
+    await FcmService.instance.requestPermission();
+
+    // Initialize TFLite model
+    await TflitePredictionService().initModel();
   } catch (e) {
-    debugPrint('Firebase initialization failed: $e');
+    debugPrint('Firebase or TFLite initialization failed: $e');
   }
 
   SystemChrome.setSystemUIOverlayStyle(
@@ -50,12 +57,15 @@ void main() async {
   );
 }
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 class DiaCareApp extends StatelessWidget {
   const DiaCareApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'DiaCare AI',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,

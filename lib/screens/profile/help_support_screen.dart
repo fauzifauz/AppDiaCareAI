@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/support_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -49,40 +50,71 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
     } catch (_) {}
   }
 
+  String? _encodeQueryParameters(Map<String, String> params) {
+    return params.entries
+        .map((MapEntry<String, String> e) =>
+            '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
+        .join('&');
+  }
+
   Future<void> _sendEmail() async {
-    // Copy email to clipboard and show snackbar with copy option
-    await Clipboard.setData(const ClipboardData(text: _supportEmail));
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Email: $_supportEmail (disalin ke clipboard)',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: AppTheme.primaryBlue,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+    final Uri emailLaunchUri = Uri(
+      scheme: 'mailto',
+      path: _supportEmail,
+      query: _encodeQueryParameters(<String, String>{
+        'subject': 'Tanya / Laporan DiaCare AI',
+      }),
+    );
+    try {
+      if (await canLaunchUrl(emailLaunchUri)) {
+        await launchUrl(emailLaunchUri);
+      } else {
+        throw 'Cannot launch mailto';
+      }
+    } catch (_) {
+      await Clipboard.setData(const ClipboardData(text: _supportEmail));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Email: $_supportEmail (disalin ke clipboard)',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+            backgroundColor: AppTheme.primaryBlue,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
   Future<void> _openWhatsApp() async {
-    // Copy WhatsApp number to clipboard and show snackbar
-    await Clipboard.setData(ClipboardData(text: _whatsappNumber));
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'WhatsApp: $_whatsappNumber (disalin ke clipboard)',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: const Color(0xFF25D366),
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+    final cleanNumber = _whatsappNumber.replaceAll(RegExp(r'[^\d]'), '');
+    final Uri whatsappUri = Uri.parse(
+        'https://wa.me/$cleanNumber?text=${Uri.encodeComponent("Halo tim support DiaCare AI, saya membutuhkan bantuan...")}');
+    try {
+      if (await canLaunchUrl(whatsappUri)) {
+        await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+      } else {
+        throw 'Cannot launch wa.me';
+      }
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: _whatsappNumber));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'WhatsApp: $_whatsappNumber (disalin ke clipboard)',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+            backgroundColor: const Color(0xFF25D366),
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
@@ -202,32 +234,25 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
             // Contact Buttons
             _buildSectionTitle('Hubungi Kami'),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildContactButton(
-                    onTap: _sendEmail,
-                    icon: Icons.email_rounded,
-                    label: 'Email Support',
-                    sublabel: _supportEmail,
-                    color: AppTheme.primaryBlue,
-                    bgColor: const Color(0xFFEEF3FF),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildContactButton(
-                    onTap: _openWhatsApp,
-                    icon: Icons.chat_rounded,
-                    label: 'WhatsApp',
-                    sublabel: _whatsappNumber,
-                    color: const Color(0xFF25D366),
-                    bgColor: const Color(0xFFF0FDF4),
-                  ),
-                ),
-              ],
+            _buildContactCard(
+              onTap: _sendEmail,
+              icon: Icons.alternate_email_rounded,
+              title: 'Email Support',
+              subtitle: _supportEmail,
+              gradientColors: const [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+              iconColor: const Color(0xFF1D4ED8),
+              actionBgColor: const Color(0xFFEFF6FF),
             ),
-            const SizedBox(height: 24),
+            _buildContactCard(
+              onTap: _openWhatsApp,
+              icon: Icons.chat_bubble_outline_rounded,
+              title: 'WhatsApp Support',
+              subtitle: _whatsappNumber,
+              gradientColors: const [Color(0xFF10B981), Color(0xFF047857)],
+              iconColor: const Color(0xFF047857),
+              actionBgColor: const Color(0xFFECFDF5),
+            ),
+            const SizedBox(height: 16),
 
             // FAQ
             _buildSectionTitle('Pertanyaan yang Sering Diajukan'),
@@ -421,26 +446,22 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
               child: Column(
                 children: [
                   // App logo area
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppTheme.primaryBlue, Color(0xFFEF4444)],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
+                  SizedBox(
+                    width: 140,
+                    height: 140,
+                    child: Image.asset(
+                      'assets/images/Logo/Logo1.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.favorite_rounded,
+                          color: Color(0xFFEF4444),
+                          size: 64,
+                        );
+                      },
                     ),
-                    child: const Icon(Icons.favorite_rounded,
-                        color: Colors.white, size: 34),
                   ),
-                  const SizedBox(height: 14),
-                  Text('DiaCare AI',
-                      style: GoogleFonts.inter(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textDark,
-                          letterSpacing: -0.5)),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 12),
                   Text('Smart Diabetes Care & Monitoring',
                       style: GoogleFonts.inter(
                           fontSize: 13, color: AppTheme.textGrey)),
@@ -450,12 +471,6 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                   _buildAppInfoRow('Versi Aplikasi', 'v$_appVersion'),
                   const SizedBox(height: 8),
                   _buildAppInfoRow('Build Number', _buildNumber),
-                  const SizedBox(height: 8),
-                  _buildAppInfoRow('Platform', 'Flutter'),
-                  const SizedBox(height: 8),
-                  _buildAppInfoRow('Backend', 'Firebase Realtime DB + Firestore'),
-                  const SizedBox(height: 8),
-                  _buildAppInfoRow('AI Engine', 'DiaCare Metabolic AI v2'),
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -502,45 +517,98 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
     );
   }
 
-  Widget _buildContactButton({
+  Widget _buildContactCard({
     required VoidCallback onTap,
     required IconData icon,
-    required String label,
-    required String sublabel,
-    required Color color,
-    required Color bgColor,
+    required String title,
+    required String subtitle,
+    required List<Color> gradientColors,
+    required Color iconColor,
+    required Color actionBgColor,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.25), width: 1.2),
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 22),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppTheme.borderColor, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.015),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(24),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: gradientColors,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: gradientColors.last.withOpacity(0.25),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.inter(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: iconColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: actionBgColor,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: iconColor,
+                    size: 12,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(label,
-                style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textDark)),
-            const SizedBox(height: 2),
-            Text(sublabel,
-                style: GoogleFonts.inter(
-                    fontSize: 10, color: color, fontWeight: FontWeight.w600),
-                textAlign: TextAlign.center),
-          ],
+          ),
         ),
       ),
     );

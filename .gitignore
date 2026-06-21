@@ -23,8 +23,8 @@ migrate_working_dir/
 *.iws
 .idea/
 
-# VS Code (uncomment if you don't want to share launch configs)
-# .vscode/
+# VS Code
+.vscode/
 
 # ============================================================
 # FLUTTER / DART / PUB
@@ -140,7 +140,14 @@ google-services.json
 GoogleService-Info.plist
 
 # ============================================================
-# MACOS / WINDOWS SYSTEM FILES
+# MACOS / WINDOWS SYSTEM FILES & GENERAL OUTPUTS
 # ============================================================
 Thumbs.db
 Desktop.ini
+*.apk
+*.ap_
+*.aab
+*.ipa
+*.xcresult
+*.dSYM
+node_modules/

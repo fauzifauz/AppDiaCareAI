@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
+import '../../models/risk_prediction.dart';
+import '../../utils/explainable_ai_helper.dart';
 
 class ExplainableAiScreen extends StatefulWidget {
   final double risk;
@@ -13,6 +15,8 @@ class ExplainableAiScreen extends StatefulWidget {
   final double bmi;
   final double hba1c;
   final double glucose;
+  final List<FeatureContribution>? savedContributions;
+  final String? savedModelTransparency;
 
   const ExplainableAiScreen({
     super.key,
@@ -25,6 +29,8 @@ class ExplainableAiScreen extends StatefulWidget {
     required this.bmi,
     required this.hba1c,
     required this.glucose,
+    this.savedContributions,
+    this.savedModelTransparency,
   });
 
   @override
@@ -36,182 +42,20 @@ class _ExplainableAiScreenState extends State<ExplainableAiScreen> {
 
   // Function to calculate SHAP-like values that sum up to (risk - baseValue)
   List<FeatureContribution> _calculateContributions() {
-    const double baseValue = 10.0; // Base population risk
-    
-    // 1. Calculate raw heuristic weights for each input feature
-    double wHbA1c = 0;
-    if (widget.hba1c >= 6.5) {
-      wHbA1c = 30.0;
-    } else if (widget.hba1c >= 5.7) {
-      wHbA1c = 15.0;
-    } else {
-      wHbA1c = -5.0; // Protective factor
+    if (widget.savedContributions != null && widget.savedContributions!.isNotEmpty) {
+      return widget.savedContributions!;
     }
-
-    double wGlucose = 0;
-    if (widget.glucose >= 200) {
-      wGlucose = 25.0;
-    } else if (widget.glucose >= 140) {
-      wGlucose = 15.0;
-    } else if (widget.glucose >= 100) {
-      wGlucose = 5.0;
-    } else {
-      wGlucose = -3.5;
-    }
-
-    double wBmi = 0;
-    if (widget.bmi >= 30) {
-      wBmi = 15.0;
-    } else if (widget.bmi >= 25) {
-      wBmi = 8.0;
-    } else if (widget.bmi < 18.5) {
-      wBmi = 2.0;
-    } else {
-      wBmi = -4.0;
-    }
-
-    double wHypertension = (widget.hypertension == 'Ya') ? 12.0 : -2.0;
-    double wHeartDisease = (widget.heartDisease == 'Ya') ? 10.0 : -1.5;
-    
-    // Age weight based on baseline age of 35
-    double wAge = (widget.age * 0.22) - 7.5; 
-
-    double wSmoking = 0;
-    if (widget.smokingHistory == 'Current' || widget.smokingHistory == 'Ever') {
-      wSmoking = 6.0;
-    } else if (widget.smokingHistory == 'Former' || widget.smokingHistory == 'Not Current') {
-      wSmoking = 3.0;
-    } else {
-      wSmoking = -1.0;
-    }
-
-    double wGender = (widget.gender == 'Male') ? 1.0 : -0.5;
-
-    // 2. Normalize weights so they perfectly sum to (risk - baseValue)
-    final List<Map<String, dynamic>> rawFeatures = [
-      {
-        'name': 'Kadar HbA1c',
-        'valueText': '${widget.hba1c.toStringAsFixed(1)}%',
-        'rawWeight': wHbA1c,
-        'icon': Icons.water_drop_rounded,
-        'desc': 'Rata-rata gula darah 3 bulan terakhir.',
-        'highDesc': 'Kadar HbA1c Anda tinggi (>= 5.7%), yang merupakan indikator utama prediabetes/diabetes.',
-        'lowDesc': 'Kadar HbA1c Anda berada dalam rentang optimal (< 5.7%), menekan risiko diabetes.',
-      },
-      {
-        'name': 'Glukosa Darah',
-        'valueText': '${widget.glucose.toStringAsFixed(0)} mg/dL',
-        'rawWeight': wGlucose,
-        'icon': Icons.bloodtype_rounded,
-        'desc': 'Kadar glukosa darah saat tes.',
-        'highDesc': 'Glukosa darah di atas normal meningkatkan beban kerja pankreas dan sensitivitas insulin.',
-        'lowDesc': 'Glukosa darah Anda normal (< 100 mg/dL), indikasi regulasi gula darah yang sehat.',
-      },
-      {
-        'name': 'Indeks Massa Tubuh',
-        'valueText': '${widget.bmi.toStringAsFixed(1)} BMI',
-        'rawWeight': wBmi,
-        'icon': Icons.monitor_weight_rounded,
-        'desc': 'Rasio berat badan terhadap tinggi badan.',
-        'highDesc': 'BMI tinggi (>= 25) memicu penumpukan lemak visceral dan memicu resistensi insulin.',
-        'lowDesc': 'BMI Anda ideal (18.5 - 24.9), mendukung fungsi metabolisme sel tubuh yang optimal.',
-      },
-      {
-        'name': 'Tekanan Darah Tinggi',
-        'valueText': widget.hypertension ?? 'Tidak',
-        'rawWeight': wHypertension,
-        'icon': Icons.speed_rounded,
-        'desc': 'Riwayat hipertensi medis.',
-        'highDesc': 'Tekanan darah tinggi merusak pembuluh darah kecil dan berkaitan dengan sindrom metabolik.',
-        'lowDesc': 'Tidak memiliki riwayat hipertensi membantu menjaga sirkulasi dan kesehatan vaskular.',
-      },
-      {
-        'name': 'Penyakit Jantung',
-        'valueText': widget.heartDisease ?? 'Tidak',
-        'rawWeight': wHeartDisease,
-        'icon': Icons.favorite_rounded,
-        'desc': 'Riwayat penyakit kardiovaskular.',
-        'highDesc': 'Penyakit jantung berkolerasi dengan gangguan metabolik sistemik secara keseluruhan.',
-        'lowDesc': 'Ketiadaan riwayat penyakit jantung mengurangi kemungkinan komplikasi kardiovaskular.',
-      },
-      {
-        'name': 'Faktor Usia',
-        'valueText': '${widget.age.toStringAsFixed(0)} Tahun',
-        'rawWeight': wAge,
-        'icon': Icons.calendar_month_rounded,
-        'desc': 'Usia kronologis pasien.',
-        'highDesc': 'Pertambahan usia meningkatkan risiko diabetes akibat penurunan alami fungsi pankreas.',
-        'lowDesc': 'Usia muda diasosiasikan dengan cadangan fungsi pankreas yang lebih sehat dan aktif.',
-      },
-      {
-        'name': 'Riwayat Merokok',
-        'valueText': widget.smokingHistory ?? 'No Info',
-        'rawWeight': wSmoking,
-        'icon': Icons.smoking_rooms_rounded,
-        'desc': 'Status konsumsi tembakau.',
-        'highDesc': 'Zat beracun pada rokok memicu inflamasi kronis dan menurunkan sensitivitas reseptor insulin.',
-        'lowDesc': 'Tidak memiliki kebiasaan merokok melindungi sel-sel tubuh dari stres oksidatif.',
-      },
-      {
-        'name': 'Jenis Kelamin',
-        'valueText': widget.gender ?? 'Other',
-        'rawWeight': wGender,
-        'icon': Icons.person_rounded,
-        'desc': 'Pengaruh hormonal & genetika.',
-        'highDesc': 'Faktor biologis gender memberikan sedikit pengaruh tambahan pada metabolisme tubuh.',
-        'lowDesc': 'Profil hormon gender memberikan perlindungan alami minor terhadap resistensi insulin.',
-      },
-    ];
-
-    double sumPositive = 0;
-    double sumNegative = 0;
-    for (var f in rawFeatures) {
-      double w = f['rawWeight'] as double;
-      if (w > 0) {
-        sumPositive += w;
-      } else {
-        sumNegative += w.abs();
-      }
-    }
-
-    double targetDiff = widget.risk - baseValue;
-    
-    // Scale contributions to align perfectly with computed risk
-    List<FeatureContribution> contributions = [];
-    for (var f in rawFeatures) {
-      double w = f['rawWeight'] as double;
-      double scaledWeight = 0;
-      if (targetDiff >= 0) {
-        if (w > 0) {
-          scaledWeight = sumPositive > 0 ? w * (targetDiff + sumNegative) / sumPositive : 0;
-        } else {
-          scaledWeight = w;
-        }
-      } else {
-        if (w < 0) {
-          scaledWeight = sumNegative > 0 ? w * (targetDiff.abs() + sumPositive) / sumNegative : 0;
-        } else {
-          scaledWeight = w;
-        }
-      }
-
-      if (scaledWeight > 45.0) scaledWeight = 45.0;
-      if (scaledWeight < -20.0) scaledWeight = -20.0;
-
-      contributions.add(
-        FeatureContribution(
-          name: f['name'] as String,
-          valueText: f['valueText'] as String,
-          contributionPercentage: scaledWeight,
-          icon: f['icon'] as IconData,
-          description: f['desc'] as String,
-          impactMessage: scaledWeight >= 0 ? f['highDesc'] as String : f['lowDesc'] as String,
-        ),
-      );
-    }
-
-    contributions.sort((a, b) => b.contributionPercentage.compareTo(a.contributionPercentage));
-    return contributions;
+    return ExplainableAiHelper.calculateContributions(
+      risk: widget.risk,
+      gender: widget.gender,
+      age: widget.age,
+      hypertension: widget.hypertension,
+      heartDisease: widget.heartDisease,
+      smokingHistory: widget.smokingHistory,
+      bmi: widget.bmi,
+      hba1c: widget.hba1c,
+      glucose: widget.glucose,
+    );
   }
 
   @override
@@ -1074,6 +918,10 @@ class _ExplainableAiScreenState extends State<ExplainableAiScreen> {
   }
 
   Widget _buildModelDisclaimerCard() {
+    final transparencyText = (widget.savedModelTransparency != null && widget.savedModelTransparency!.isNotEmpty)
+        ? widget.savedModelTransparency!
+        : 'Model prediksi DiaCare AI dibangun menggunakan arsitektur XGBoost (Extreme Gradient Boosting) yang dikonversi ke format TensorFlow Lite dan dijalankan secara lokal di perangkat. Penjelasan Explainable AI (XAI) dihasilkan secara real-time melalui nilai SHAP (SHapley Additive exPlanations) untuk menjamin transparansi analisis klinis bagi tenaga medis dan pengguna.';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(22),
@@ -1111,7 +959,7 @@ class _ExplainableAiScreenState extends State<ExplainableAiScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Model prediksi DiaCare AI dibangun menggunakan arsitektur Gradient Boosted Machine (GBM) yang menganalisis multivariat data metabolik. Metode penjelasan lokal menggunakan framework SHAP (SHapley Additive exPlanations) untuk menjamin transparansi klinis yang dapat dipertanggungjawabkan bagi tenaga medis dan pengguna.',
+            transparencyText,
             style: GoogleFonts.inter(
               fontSize: 11,
               color: const Color(0xFF94A3B8),
@@ -1123,22 +971,4 @@ class _ExplainableAiScreenState extends State<ExplainableAiScreen> {
       ),
     );
   }
-}
-
-class FeatureContribution {
-  final String name;
-  final String valueText;
-  final double contributionPercentage;
-  final IconData icon;
-  final String description;
-  final String impactMessage;
-
-  FeatureContribution({
-    required this.name,
-    required this.valueText,
-    required this.contributionPercentage,
-    required this.icon,
-    required this.description,
-    required this.impactMessage,
-  });
 }

@@ -127,4 +127,45 @@ class AuthRepository {
   Future<void> reloadUser() async {
     await _authService.reloadUser();
   }
+
+  /// Updates user email address.
+  Future<void> updateEmail(String newEmail) async {
+    await _authService.updateEmail(newEmail);
+  }
+
+  /// Fetches enrolled MFA factors.
+  Future<List<MultiFactorInfo>> getEnrolledMfaFactors() async {
+    return await _authService.getEnrolledMfaFactors();
+  }
+
+  /// Starts SMS phone MFA enrollment.
+  Future<void> startPhoneMfaEnrollment({
+    required String phoneNumber,
+    required void Function(String verificationId) onCodeSent,
+    required void Function(Exception error) onError,
+  }) async {
+    await _authService.startPhoneMfaEnrollment(
+      phoneNumber: phoneNumber,
+      onCodeSent: onCodeSent,
+      onError: onError,
+    );
+  }
+
+  /// Finalizes phone MFA enrollment.
+  Future<void> finalizePhoneMfaEnrollment({
+    required String verificationId,
+    required String smsCode,
+    required String displayName,
+  }) async {
+    await _authService.finalizePhoneMfaEnrollment(
+      verificationId: verificationId,
+      smsCode: smsCode,
+      displayName: displayName,
+    );
+  }
+
+  /// Unenrolls a specific MFA factor.
+  Future<void> unenrollMfa(String factorId) async {
+    await _authService.unenrollMfa(factorId);
+  }
 }

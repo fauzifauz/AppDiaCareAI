@@ -25,9 +25,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   double _uploadProgress = 0.0;
   final ImagePicker _picker = ImagePicker();
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<AuthProvider>().syncEmailWithFirebase();
+      }
+    });
+  }
+
   void _showEditProfileSheet(UserModel profile) {
     final nameController = TextEditingController(text: profile.fullName);
     final ageController = TextEditingController(text: profile.age.toString());
+    final emailController = TextEditingController(text: profile.email);
     String selectedGender = profile.gender.isNotEmpty ? profile.gender : 'Laki-laki';
     XFile? tempPickedImage = _pickedImage;
 
@@ -42,15 +53,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               bottom: MediaQuery.of(context).viewInsets.bottom,
             ),
             child: Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.85,
+              ),
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
               ),
               padding: const EdgeInsets.all(28),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -104,7 +120,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   border: Border.all(color: Colors.white, width: 4),
                                   gradient: (tempPickedImage == null && profile.photoUrl.isEmpty)
                                       ? const LinearGradient(
-                                          colors: [AppTheme.primaryBlue, Color(0xFFEF4444)],
+                                          colors: [Color(0xFF4A90D9), AppTheme.primaryBlue],
                                         )
                                       : null,
                                   image: tempPickedImage != null
@@ -209,6 +225,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     decoration: InputDecoration(
                       hintText: 'Masukkan nama lengkap',
                       prefixIcon: const Icon(Icons.person_outline_rounded, color: AppTheme.primaryBlue),
+                      fillColor: const Color(0xFFF8FAFC),
+                      filled: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Email Field
+                  Text(
+                    'ALAMAT EMAIL',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textLight,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    onChanged: (val) {
+                      setSheetState(() {});
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Masukkan alamat email baru',
+                      prefixIcon: const Icon(Icons.email_outlined, color: AppTheme.primaryBlue),
                       fillColor: const Color(0xFFF8FAFC),
                       filled: true,
                       border: OutlineInputBorder(
@@ -368,6 +415,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                    ),
                                  );
                                }
+
+                               // Update email address if it has changed
+                               final newEmail = emailController.text.trim();
+                               if (newEmail.isNotEmpty && newEmail != profile.email) {
+                                 final emailSuccess = await authProv.updateEmail(newEmail);
+                                 if (emailSuccess && context.mounted) {
+                                   ScaffoldMessenger.of(context).showSnackBar(
+                                     SnackBar(
+                                       content: Text(
+                                         'Permintaan ubah email berhasil! Email verifikasi dikirim ke $newEmail. Periksa email lama Anda untuk keamanan.',
+                                         style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                                       ),
+                                       backgroundColor: AppTheme.accentGreen,
+                                       behavior: SnackBarBehavior.floating,
+                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                       duration: const Duration(seconds: 6),
+                                     ),
+                                   );
+                                 } else if (!emailSuccess && context.mounted) {
+                                   ScaffoldMessenger.of(context).showSnackBar(
+                                     SnackBar(
+                                       content: Text(
+                                         authProv.errorMessage ?? 'Gagal memperbarui email.',
+                                         style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                                       ),
+                                       backgroundColor: const Color(0xFFEF4444),
+                                       behavior: SnackBarBehavior.floating,
+                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                     ),
+                                   );
+                                 }
+                               }
                              }
                            },
                           style: ElevatedButton.styleFrom(
@@ -393,7 +472,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
-          );
+          ),
+        );
         },
       ),
     );
@@ -425,17 +505,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
     
     final latestRecord = healthProvider.latestRecord;
     final averageGlucose = healthProvider.averageGlucose;
+    final latestPrediction = healthProvider.predictions.isNotEmpty
+        ? healthProvider.predictions.first
+        : null;
     
     // Calculate BMI and status
-    final double bmiValue = latestRecord != null ? latestRecord.bmi : 0.0;
-    final String bmiStatus = latestRecord != null ? latestRecord.bmiStatus : 'N/A';
+    double bmiValue = 0.0;
+    String bmiStatus = 'N/A';
+    
+    if (healthProvider.records.isNotEmpty) {
+      if (latestRecord != null && latestPrediction != null) {
+        final recordTime = DateTime.tryParse(latestRecord.timestamp) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final predictionTime = DateTime.tryParse(latestPrediction.timestamp) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        if (predictionTime.isAfter(recordTime)) {
+          bmiValue = latestPrediction.bmi;
+        } else {
+          bmiValue = latestRecord.bmi;
+        }
+      } else if (latestPrediction != null) {
+        bmiValue = latestPrediction.bmi;
+      } else if (latestRecord != null) {
+        bmiValue = latestRecord.bmi;
+      }
+    }
+    
+    if (bmiValue > 0) {
+      if (bmiValue < 18.5) {
+        bmiStatus = 'Kurus';
+      } else if (bmiValue < 25.0) {
+        bmiStatus = 'Normal';
+      } else if (bmiValue < 30.0) {
+        bmiStatus = 'Kelebihan Berat';
+      } else {
+        bmiStatus = 'Obesitas';
+      }
+    }
     
     // Calculate HbA1c
-    final double hba1cEst = averageGlucose > 0 ? (averageGlucose + 46.7) / 28.7 : 0.0;
-    final String hba1cText = averageGlucose > 0 ? '${hba1cEst.toStringAsFixed(1)}%' : '--';
-    final String hba1cStatus = averageGlucose > 0 
-        ? (hba1cEst < 5.7 ? 'Optimal' : (hba1cEst < 6.5 ? 'Prediabetes' : 'Diabetes')) 
-        : 'N/A';
+    double hba1cVal = 0.0;
+    String hba1cStatus = 'N/A';
+    
+    if (healthProvider.records.isNotEmpty) {
+      if (latestPrediction != null && latestPrediction.hba1c > 0) {
+        hba1cVal = latestPrediction.hba1c;
+      } else {
+        final averageGlucose = healthProvider.averageGlucose;
+        if (averageGlucose > 0) {
+          hba1cVal = (averageGlucose + 46.7) / 28.7;
+        }
+      }
+    }
+    
+    if (hba1cVal > 0) {
+      if (hba1cVal < 5.7) {
+        hba1cStatus = 'Optimal';
+      } else if (hba1cVal < 6.5) {
+        hba1cStatus = 'Prediabetes';
+      } else {
+        hba1cStatus = 'Diabetes';
+      }
+    }
+    final String hba1cText = hba1cVal > 0 ? '${hba1cVal.toStringAsFixed(1)}%' : '--';
+
 
     return Container(
       color: const Color(0xFFF8FAFC), // Same solid background color as other screens
@@ -493,7 +624,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 border: Border.all(color: Colors.white, width: 4),
                                 gradient: avatarImage == null
                                     ? const LinearGradient(
-                                        colors: [AppTheme.primaryBlue, Color(0xFFEF4444)],
+                                        colors: [Color(0xFF4A90D9), AppTheme.primaryBlue],
                                       )
                                     : null,
                                 image: avatarImage != null
@@ -703,18 +834,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     color: const Color(0xFFEF4444), // Red
                     onTap: () {
                       final warningCountVal = healthProvider.records.where((r) => r.glucoseLevel > 140).length;
+                      final latestPrediction = healthProvider.predictions.isNotEmpty ? healthProvider.predictions.first : null;
+                      final riskLevelVal = latestPrediction != null ? latestPrediction.riskLevel : (averageGlucose > 140 ? 'Risiko Tinggi' : (averageGlucose > 110 ? 'Risiko Sedang' : 'Risiko Rendah'));
+                      final riskPercentageVal = latestPrediction != null ? latestPrediction.riskPercentage : (averageGlucose > 140 ? 55.0 : (averageGlucose > 110 ? 30.0 : 12.0));
+                      final metabolicScoreVal = latestPrediction != null ? latestPrediction.metabolicScore : (averageGlucose > 140 ? 65.0 : (averageGlucose > 110 ? 78.0 : 88.0));
+
+                      String formatSteps(double steps) {
+                        final intVal = steps.toInt();
+                        if (intVal >= 1000) {
+                          final str = intVal.toString();
+                          final len = str.length;
+                          return '${str.substring(0, len - 3)},${str.substring(len - 3)}';
+                        }
+                        return intVal.toString();
+                      }
+
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => ReportPreviewScreen(
                             name: name,
-                            riskLevel: averageGlucose > 140 
-                                ? 'Risiko Tinggi' 
-                                : (averageGlucose > 110 ? 'Risiko Sedang' : 'Risiko Rendah'),
-                            riskPercentage: averageGlucose > 140 ? 55.0 : (averageGlucose > 110 ? 30.0 : 12.0),
-                            metabolicScore: averageGlucose > 140 ? 65.0 : (averageGlucose > 110 ? 78.0 : 88.0),
+                            riskLevel: riskLevelVal,
+                            riskPercentage: riskPercentageVal,
+                            metabolicScore: metabolicScoreVal,
                             averageGlucose: averageGlucose > 0 ? averageGlucose.toStringAsFixed(0) : '0',
-                            averageSteps: '8,100',
+                            averageSteps: formatSteps(healthProvider.averageSteps),
                             warningCount: warningCountVal,
                             pickedImage: _pickedImage,
                             historyEntries: [

@@ -55,7 +55,7 @@ class FcmService {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
     // Request OS permission (iOS + Android 13+)
-    await _requestPermission();
+    await requestPermission();
 
     // Setup local notifications channel (Android)
     await _setupLocalNotifications();
@@ -77,7 +77,7 @@ class FcmService {
 
   // ── Permissions ───────────────────────────────────────────────────────────
 
-  Future<void> _requestPermission() async {
+  Future<void> requestPermission() async {
     final settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
@@ -86,6 +86,18 @@ class FcmService {
     );
     debugPrint(
         'FcmService: Permission status — ${settings.authorizationStatus}');
+
+    if (!kIsWeb) {
+      await _localNotif
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+      
+      await _localNotif
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestExactAlarmsPermission();
+    }
   }
 
   // ── Token Management ──────────────────────────────────────────────────────
@@ -165,7 +177,9 @@ class FcmService {
       _channelId,
       _channelName,
       description: _channelDesc,
-      importance: Importance.high,
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
     );
 
     await _localNotif
@@ -175,7 +189,7 @@ class FcmService {
 
     // Initialize local notifications plugin
     const AndroidInitializationSettings androidInit =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('notification_icon');
 
     const DarwinInitializationSettings iosInit =
         DarwinInitializationSettings(
@@ -237,9 +251,12 @@ class FcmService {
       _channelId,
       _channelName,
       channelDescription: _channelDesc,
-      importance: Importance.high,
-      priority: Priority.high,
-      icon: '@mipmap/ic_launcher',
+      importance: Importance.max,
+      priority: Priority.max,
+      icon: 'notification_icon',
+      largeIcon: DrawableResourceAndroidBitmap('notification_icon'),
+      playSound: true,
+      enableVibration: true,
     );
 
     const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
@@ -304,9 +321,12 @@ class FcmService {
         _channelId,
         _channelName,
         channelDescription: _channelDesc,
-        importance: Importance.high,
-        priority: Priority.high,
-        icon: '@mipmap/ic_launcher',
+        importance: Importance.max,
+        priority: Priority.max,
+        icon: 'notification_icon',
+        largeIcon: DrawableResourceAndroidBitmap('notification_icon'),
+        playSound: true,
+        enableVibration: true,
       );
 
       const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(

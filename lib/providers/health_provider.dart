@@ -128,6 +128,19 @@ class HealthProvider extends ChangeNotifier {
     }
   }
 
+  /// Deletes a risk prediction.
+  Future<bool> removeRiskPrediction(String predictionId) async {
+    if (_activeUid == null) return false;
+    try {
+      await _dbRepository.deleteRiskPrediction(_activeUid!, predictionId);
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// Log custom activities (e.g. view dashboard, profile, predictions).
   Future<void> logCustomActivity(String action, String description) async {
     if (_activeUid == null) return;
@@ -151,6 +164,14 @@ class HealthProvider extends ChangeNotifier {
     if (_records.isEmpty) return 0.0;
     final double sum = _records.map((r) => r.glucoseLevel).reduce((a, b) => a + b);
     return sum / _records.length;
+  }
+
+  /// Average daily steps.
+  double get averageSteps {
+    final validRecords = _records.where((r) => r.steps > 0).toList();
+    if (validRecords.isEmpty) return 0.0;
+    final double sum = validRecords.map((r) => r.steps.toDouble()).reduce((a, b) => a + b);
+    return sum / validRecords.length;
   }
 
   /// Latest activity log recorded.

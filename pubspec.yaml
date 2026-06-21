@@ -27,12 +27,15 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   package_info_plus: ^10.1.0
   path_provider: ^2.1.6
+  url_launcher: ^6.3.0
+  tflite_flutter: ^0.12.1
 
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
@@ -41,4 +44,7 @@ flutter:
     - assets/images/
     - assets/images/splashscreen/
     - assets/images/onboarding/
+    - assets/images/Logo/
+    - assets/images/Logo/Logo1.png
+    - assets/models/diacare_model.tflite
 

@@ -204,6 +204,17 @@ class DatabaseService {
     }
   }
 
+  /// Delete a risk prediction from users/$uid/risk_predictions.
+  Future<void> deleteRiskPrediction(String uid, String predictionId) async {
+    try {
+      await _db.ref('$_usersNode/$uid/risk_predictions/$predictionId').remove();
+      debugPrint('DatabaseService: Risk prediction deleted: $predictionId');
+    } catch (e) {
+      debugPrint('DatabaseService: deleteRiskPrediction error: $e');
+      throw Exception('Gagal menghapus hasil prediksi risiko.');
+    }
+  }
+
   /// Get a stream of risk predictions count for UID.
   Stream<int> getRiskPredictionsCountStream(String uid) {
     return _db.ref('$_usersNode/$uid/risk_predictions').onValue.map((event) {
@@ -258,12 +269,13 @@ class DatabaseService {
     });
   }
 
-  /// Clear user's history nodes (sensor_data, risk_predictions, activity_logs).
+  /// Clear user's history nodes (sensor_data, risk_predictions, activity_logs, health_history).
   Future<void> clearUserHistory(String uid) async {
     try {
       await _db.ref('$_usersNode/$uid/sensor_data').remove();
       await _db.ref('$_usersNode/$uid/risk_predictions').remove();
       await _db.ref('$_usersNode/$uid/$_logsNode').remove();
+      await _db.ref('$_usersNode/$uid/$_historyNode').remove();
       debugPrint('DatabaseService: Cleared history nodes for UID: $uid');
     } catch (e) {
       debugPrint('DatabaseService: clearUserHistory error: $e');

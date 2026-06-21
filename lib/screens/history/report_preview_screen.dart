@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:printing/printing.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../services/health_report_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -82,17 +83,166 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
         historyEntries: widget.historyEntries,
       );
 
-      // Open native print/save dialog on web or mobile
-      await Printing.layoutPdf(
-        onLayout: (format) async => pdfBytes,
-        name: 'DiaCare_Laporan_Kesehatan_${widget.name}.pdf',
-      );
+      final now = DateTime.now();
+      final formattedDate = "${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}";
+      final fileName = "DiaCareAI_Laporan_Kesehatan_$formattedDate.pdf";
+
+      List<String> pathsToTry = [];
+
+      // 1. Try public Download directories on Android
+      if (!kIsWeb && Platform.isAndroid) {
+        pathsToTry.addAll([
+          '/storage/emulated/0/Download/$fileName',
+          '/sdcard/Download/$fileName',
+        ]);
+      }
+
+      // 2. Try external storage directories
+      try {
+        final extDir = await getExternalStorageDirectory();
+        if (extDir != null) {
+          pathsToTry.add('${extDir.path}/$fileName');
+          pathsToTry.add('${extDir.path}/Download/$fileName');
+        }
+      } catch (_) {}
+
+      // 3. Try app documents directory as fallback
+      try {
+        final docDir = await getApplicationDocumentsDirectory();
+        pathsToTry.add('${docDir.path}/$fileName');
+      } catch (_) {}
+
+      File? savedFile;
+      String? lastError;
+
+      for (final path in pathsToTry) {
+        try {
+          final file = File(path);
+          final parentDir = file.parent;
+          if (!await parentDir.exists()) {
+            await parentDir.create(recursive: true);
+          }
+          await file.writeAsBytes(pdfBytes);
+          savedFile = file;
+          break; // Successfully saved!
+        } catch (e) {
+          lastError = e.toString();
+          debugPrint('Failed to save to $path: $e');
+        }
+      }
+
+      // Fallback if local direct save completely failed but we still have pdfBytes
+      if (savedFile == null) {
+        debugPrint('Direct file saving failed: $lastError. Falling back to native system print/save dialog.');
+        await Printing.layoutPdf(
+          onLayout: (format) async => pdfBytes,
+          name: fileName,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Laporan PDF siap diunduh/dicetak dengan nama: $fileName'),
+              backgroundColor: AppTheme.primaryBlue,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Show beautiful success dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.check_circle_outline_rounded, color: Color(0xFF16A34A), size: 28),
+                const SizedBox(width: 10),
+                Text('Unduh Berhasil', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Laporan PDF telah berhasil diunduh dan disimpan langsung ke penyimpanan perangkat Anda:',
+                  style: GoogleFonts.inter(fontSize: 14),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: Text(
+                    savedFile!.path,
+                    style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textDark, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Anda dapat membuka, membagikan, memindahkan, atau mencetak file laporan ini menggunakan aplikasi lain.',
+                  style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textGrey),
+                ),
+              ],
+            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: Text('Tutup', style: GoogleFonts.inter(color: AppTheme.textGrey, fontWeight: FontWeight.w600)),
+              ),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await Printing.sharePdf(
+                    bytes: pdfBytes,
+                    filename: fileName,
+                  );
+                },
+                icon: const Icon(Icons.share_rounded, size: 18, color: Colors.white),
+                label: Text('Buka / Bagikan', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryBlue,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal mengunduh laporan: $e'),
-            backgroundColor: Colors.red,
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.red, size: 28),
+                const SizedBox(width: 10),
+                Text('Unduh Gagal', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Text(
+              'Gagal mengunduh atau menyimpan laporan PDF: $e\n\nPastikan aplikasi memiliki izin penyimpanan yang memadai dan coba lagi.',
+              style: GoogleFonts.inter(fontSize: 14),
+            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('OK', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
+              ),
+            ],
           ),
         );
       }
@@ -679,7 +829,7 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'DiaCare_Laporan_Kesehatan_${widget.name}.pdf',
+                                    'DiaCare_Laporan_Kesehatan_${widget.name.replaceAll(' ', '_')}.pdf',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: GoogleFonts.inter(

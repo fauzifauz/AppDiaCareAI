@@ -13,6 +13,15 @@ class HealthReportService {
     required int warningCount,
     required List<Map<String, String>> historyEntries,
   }) async {
+    final now = DateTime.now();
+    const indonesianMonths = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    final String generatedDate = '${now.day} ${indonesianMonths[now.month - 1]} ${now.year}';
+    final String generatedId = 'DC-${now.millisecondsSinceEpoch.toString().substring(8)}';
+    final String metabolicCondition = riskPercentage >= 50.0 ? 'Perlu Perhatian' : (riskPercentage >= 20.0 ? 'Waspada' : 'Stabil');
+
     final pdf = pw.Document();
 
     final themeColor = PdfColor.fromHex('#1A56DB'); // Blue
@@ -66,11 +75,11 @@ class HealthReportService {
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
                     pw.Text(
-                      'Generated: 13 Juni 2026',
+                      'Generated: $generatedDate',
                       style: pw.TextStyle(color: greyColor, fontSize: 9),
                     ),
                     pw.Text(
-                      'ID: DC-9843A',
+                      'ID: $generatedId',
                       style: pw.TextStyle(color: greyColor, fontSize: 9),
                     ),
                   ],
@@ -103,7 +112,7 @@ class HealthReportService {
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text('Nama Pasien: $name', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                      pw.Text('Kondisi Metabolik: Stabil', style: pw.TextStyle(fontSize: 9, color: greyColor)),
+                      pw.Text('Kondisi Metabolik: $metabolicCondition', style: pw.TextStyle(fontSize: 9, color: greyColor)),
                     ],
                   ),
                   pw.Column(
@@ -190,9 +199,9 @@ class HealthReportService {
                         ),
                         pw.SizedBox(height: 4),
                         pw.Text(
-                          'Kondisi Bagus',
+                          metabolicScore >= 80 ? 'Kondisi Bagus' : (metabolicScore >= 60 ? 'Kondisi Cukup' : 'Kondisi Lemah'),
                           style: pw.TextStyle(
-                            color: successColor,
+                            color: metabolicScore >= 80 ? successColor : (metabolicScore >= 60 ? PdfColor.fromHex('#F59E0B') : warningColor),
                             fontWeight: pw.FontWeight.bold,
                             fontSize: 10,
                           ),

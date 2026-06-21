@@ -146,8 +146,114 @@ class AuthService {
         return Exception('Akun ini telah dinonaktifkan.');
       case 'too-many-requests':
         return Exception('Terlalu banyak percobaan masuk. Coba beberapa saat lagi.');
+      case 'requires-recent-login':
+        return Exception('Aksi ini memerlukan login ulang demi keamanan.');
       default:
         return Exception(e.message ?? 'Terjadi kesalahan autentikasi.');
+    }
+  }
+
+  /// Updates the user email after sending a verification email to the new address.
+  /// This automatically triggers the security email to the old address.
+  Future<void> updateEmail(String newEmail) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('Pengguna tidak masuk.');
+      
+      final oldEmail = user.email;
+      debugPrint('AuthService: Memulai verifyBeforeUpdateEmail dari $oldEmail ke $newEmail');
+      
+      // verifyBeforeUpdateEmail is the modern way to update email securely in Firebase Auth
+      await user.verifyBeforeUpdateEmail(newEmail);
+      
+      debugPrint('AuthService: verifyBeforeUpdateEmail berhasil mengirim verifikasi ke $newEmail');
+    } on FirebaseAuthException catch (e) {
+      debugPrint('AuthService: updateEmail FirebaseAuthException [${e.code}] - ${e.message}');
+      throw _parseAuthException(e);
+    } catch (e) {
+      debugPrint('AuthService: updateEmail unexpected error: $e');
+      throw Exception('Gagal memproses pembaruan email: $e');
+    }
+  }
+
+  /// Fetch list of currently enrolled multi-factor authentication methods.
+  Future<List<MultiFactorInfo>> getEnrolledMfaFactors() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return [];
+      return user.multiFactor.getEnrolledFactors();
+    } catch (e) {
+      debugPrint('AuthService: getEnrolledMfaFactors error: $e');
+      return [];
+    }
+  }
+
+  /// Start Multi-Factor (MFA) phone enrollment.
+  Future<void> startPhoneMfaEnrollment({
+    required String phoneNumber,
+    required void Function(String verificationId) onCodeSent,
+    required void Function(Exception error) onError,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('Pengguna tidak masuk.');
+
+      final session = await user.multiFactor.getSession();
+
+      await _auth.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        verificationCompleted: (PhoneAuthCredential credential) {},
+        verificationFailed: (FirebaseAuthException e) {
+          onError(_parseAuthException(e));
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          onCodeSent(verificationId);
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {},
+        multiFactorSession: session,
+      );
+    } catch (e) {
+      onError(e is Exception ? e : Exception(e.toString()));
+    }
+  }
+
+  /// Finalize MFA phone enrollment by verifying the SMS code.
+  Future<void> finalizePhoneMfaEnrollment({
+    required String verificationId,
+    required String smsCode,
+    required String displayName,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('Pengguna tidak masuk.');
+
+      final credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+
+      final assertion = PhoneMultiFactorGenerator.getAssertion(credential);
+      await user.multiFactor.enroll(assertion, displayName: displayName);
+    } on FirebaseAuthException catch (e) {
+      debugPrint('AuthService: finalizePhoneMfaEnrollment error [${e.code}] - ${e.message}');
+      throw _parseAuthException(e);
+    } catch (e) {
+      throw Exception('Gagal memverifikasi kode OTP MFA.');
+    }
+  }
+
+  /// Unenroll/disable MFA for the user.
+  Future<void> unenrollMfa(String factorId) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('Pengguna tidak masuk.');
+      
+      await user.multiFactor.unenroll(factorUid: factorId);
+    } on FirebaseAuthException catch (e) {
+      debugPrint('AuthService: unenrollMfa error [${e.code}] - ${e.message}');
+      throw _parseAuthException(e);
+    } catch (e) {
+      throw Exception('Gagal menonaktifkan verifikasi dua faktor.');
     }
   }
 }

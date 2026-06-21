@@ -14,6 +14,7 @@ class AuthProvider extends ChangeNotifier {
 
   User? _firebaseUser;
   UserModel? _userProfile;
+  List<MultiFactorInfo> _enrolledMfaFactors = [];
   bool _isLoading = false;
   bool _isUploadingPhoto = false;
   String? _errorMessage;
@@ -33,6 +34,7 @@ class AuthProvider extends ChangeNotifier {
   // Getters
   User? get firebaseUser => _firebaseUser;
   UserModel? get userProfile => _userProfile;
+  List<MultiFactorInfo> get enrolledMfaFactors => _enrolledMfaFactors;
   bool get isAuthenticated => _firebaseUser != null;
   bool get isLoading => _isLoading;
   bool get isUploadingPhoto => _isUploadingPhoto;
@@ -45,12 +47,14 @@ class AuthProvider extends ChangeNotifier {
       // If user logs out, clear profile subscriptions
       if (user == null) {
         _userProfile = null;
+        _enrolledMfaFactors = [];
         _profileSubscription?.cancel();
         _profileSubscription = null;
         notifyListeners();
       } else {
         // If user logs in, subscribe to user profile in database
         _subscribeToUserProfile(user.uid);
+        fetchMfaFactors();
       }
     });
   }
@@ -61,6 +65,15 @@ class AuthProvider extends ChangeNotifier {
       _userProfile = profile;
       notifyListeners();
     });
+  }
+
+  Future<void> fetchMfaFactors() async {
+    try {
+      _enrolledMfaFactors = await _authRepository.getEnrolledMfaFactors();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('AuthProvider: fetchMfaFactors error: $e');
+    }
   }
 
   void _setLoading(bool value) {
@@ -297,6 +310,162 @@ class AuthProvider extends ChangeNotifier {
       );
     }
     await _authRepository.signOut();
+  }
+
+  /// Updates the user email address.
+  /// Sends a verification email to the new address and registers log activity.
+  Future<bool> updateEmail(String newEmail) async {
+    _clearError();
+    _setLoading(true);
+    final uid = _firebaseUser?.uid;
+    if (uid == null) {
+      _errorMessage = 'Pengguna tidak ditemukan.';
+      _setLoading(false);
+      return false;
+    }
+    final oldEmail = _firebaseUser?.email;
+    try {
+      debugPrint('AuthProvider: Memulai alur pembaruan email untuk UID $uid (dari $oldEmail ke $newEmail)');
+      
+      // Update email on Firebase Auth (sends verification email to newEmail)
+      await _authRepository.updateEmail(newEmail);
+      
+      // Update email on Realtime Database profile node
+      await _dbRepository.updateUserProfile(uid, {'email': newEmail});
+      
+      // Log activity
+      await _dbRepository.logActivity(
+        uid: uid,
+        action: 'Ubah Alamat Email',
+        description: 'Pengguna meminta pembaruan email dari $oldEmail ke $newEmail. Email verifikasi dikirim.',
+      );
+
+      debugPrint('AuthProvider: Pembaruan email berhasil diajukan dan dikirim ke $newEmail');
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      debugPrint('AuthProvider: Gagal memperbarui email untuk UID $uid. Error: $e');
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Request phone verification SMS for MFA.
+  Future<void> startPhoneMfa({
+    required String phoneNumber,
+    required void Function(String verificationId) onCodeSent,
+    required void Function(String error) onError,
+  }) async {
+    _clearError();
+    try {
+      await _authRepository.startPhoneMfaEnrollment(
+        phoneNumber: phoneNumber,
+        onCodeSent: onCodeSent,
+        onError: (err) {
+          _errorMessage = err.toString().replaceAll('Exception: ', '');
+          notifyListeners();
+          onError(_errorMessage!);
+        },
+      );
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      onError(_errorMessage!);
+    }
+  }
+
+  /// Confirms the phone verification code and enrolls the user.
+  Future<bool> finalizePhoneMfa({
+    required String verificationId,
+    required String smsCode,
+    required String displayName,
+  }) async {
+    _clearError();
+    _setLoading(true);
+    final uid = _firebaseUser?.uid;
+    if (uid == null) {
+      _errorMessage = 'Pengguna tidak ditemukan.';
+      _setLoading(false);
+      return false;
+    }
+    try {
+      await _authRepository.finalizePhoneMfaEnrollment(
+        verificationId: verificationId,
+        smsCode: smsCode,
+        displayName: displayName,
+      );
+
+      // Log the activity
+      await _dbRepository.logActivity(
+        uid: uid,
+        action: 'Aktivasi MFA',
+        description: 'Pengguna mengaktifkan Otentikasi Dua Faktor (MFA) menggunakan nomor $displayName.',
+      );
+
+      // Fetch updated MFA factors list
+      await fetchMfaFactors();
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Disables Multi-Factor Authentication (MFA).
+  Future<bool> disableMfa(String factorId) async {
+    _clearError();
+    _setLoading(true);
+    final uid = _firebaseUser?.uid;
+    if (uid == null) {
+      _errorMessage = 'Pengguna tidak ditemukan.';
+      _setLoading(false);
+      return false;
+    }
+    try {
+      await _authRepository.unenrollMfa(factorId);
+
+      // Log the activity
+      await _dbRepository.logActivity(
+        uid: uid,
+        action: 'Deaktivasi MFA',
+        description: 'Pengguna menonaktifkan Otentikasi Dua Faktor (MFA).',
+      );
+
+      // Fetch updated list of MFA factors
+      await fetchMfaFactors();
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Syncs the local profile email with the actual email from Firebase Auth servers.
+  /// Handles cases where user verifies a new email or clicks a revocation link.
+  Future<void> syncEmailWithFirebase() async {
+    final user = _authRepository.currentUser;
+    if (user == null) return;
+    try {
+      await user.reload();
+      final freshUser = _authRepository.currentUser;
+      final freshEmail = freshUser?.email;
+      if (freshEmail != null && _userProfile != null && _userProfile!.email != freshEmail) {
+        final uid = user.uid;
+        await _dbRepository.updateUserProfile(uid, {'email': freshEmail});
+        await _dbRepository.logActivity(
+          uid: uid,
+          action: 'Sinkronisasi Email',
+          description: 'Sinkronisasi email database dengan Firebase Auth: $freshEmail',
+        );
+      }
+    } catch (e) {
+      debugPrint('AuthProvider: syncEmailWithFirebase error: $e');
+    }
   }
 
   @override

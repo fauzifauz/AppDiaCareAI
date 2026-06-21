@@ -3,6 +3,7 @@ import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../auth/startup_screen.dart';
+import '../../services/fcm_service.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -52,6 +53,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       vsync: this,
     );
     _fadeController.forward();
+
+    // Ask for notification permissions when the user accesses onboarding for the first time
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await FcmService.instance.requestPermission();
+    });
   }
 
   @override

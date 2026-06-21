@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import '../../theme/app_theme.dart';
 import '../../providers/privacy_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -176,17 +177,6 @@ class PrivacyDataScreen extends StatelessWidget {
                   const Divider(height: 1, indent: 68, color: AppTheme.borderColor),
                   _buildSwitch(
                     context: context,
-                    icon: Icons.medical_services_rounded,
-                    iconColor: const Color(0xFF16A34A),
-                    title: 'Bagikan Data ke Dokter',
-                    subtitle: 'Izinkan dokter Anda mengakses riwayat',
-                    value: settings.shareDoctor,
-                    onChanged: (v) => privacyProvider.saveSettings(
-                        settings.copyWith(shareDoctor: v)),
-                  ),
-                  const Divider(height: 1, indent: 68, color: AppTheme.borderColor),
-                  _buildSwitch(
-                    context: context,
                     icon: Icons.history_rounded,
                     iconColor: const Color(0xFFEF4444),
                     title: 'Simpan Riwayat Kesehatan',
@@ -197,6 +187,8 @@ class PrivacyDataScreen extends StatelessWidget {
                   ),
                 ]),
                 const SizedBox(height: 24),
+
+
 
                 // Action Buttons
                 _buildSectionTitle('Kelola Data Saya'),
@@ -490,6 +482,8 @@ class PrivacyDataScreen extends StatelessWidget {
     );
   }
 
+
+
   Widget _buildActionButton({
     required VoidCallback? onTap,
     required IconData icon,
@@ -551,3 +545,4 @@ class PrivacyDataScreen extends StatelessWidget {
     );
   }
 }
+

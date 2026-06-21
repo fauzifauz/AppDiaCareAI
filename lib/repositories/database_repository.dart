@@ -98,6 +98,15 @@ class DatabaseRepository {
     await _dbService.saveRiskPrediction(uid, data);
   }
 
+  Future<void> deleteRiskPrediction(String uid, String predictionId) async {
+    await _dbService.deleteRiskPrediction(uid, predictionId);
+    await logActivity(
+      uid: uid,
+      action: 'Hapus Prediksi Risiko',
+      description: 'Menghapus riwayat prediksi risiko ID: $predictionId.',
+    );
+  }
+
   Stream<int> getRiskPredictionsCountStream(String uid) {
     return _dbService.getRiskPredictionsCountStream(uid);
   }

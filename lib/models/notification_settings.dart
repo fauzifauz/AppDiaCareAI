@@ -21,7 +21,18 @@ class NotificationSettingsModel {
     required this.updatedAt,
   });
 
-  factory NotificationSettingsModel.fromJson(Map<String, dynamic> json) {
+  factory NotificationSettingsModel.fromJson(Map<dynamic, dynamic> json) {
+    DateTime parsedDate = DateTime.now();
+    final rawUpdatedAt = json['updatedAt'];
+    if (rawUpdatedAt != null) {
+      if (rawUpdatedAt is String) {
+        parsedDate = DateTime.tryParse(rawUpdatedAt) ?? DateTime.now();
+      } else if (rawUpdatedAt is Timestamp) {
+        parsedDate = rawUpdatedAt.toDate();
+      } else if (rawUpdatedAt is int) {
+        parsedDate = DateTime.fromMillisecondsSinceEpoch(rawUpdatedAt);
+      }
+    }
     return NotificationSettingsModel(
       dailyReminder: json['dailyReminder'] as bool? ?? false,
       medicineReminder: json['medicineReminder'] as bool? ?? false,
@@ -30,7 +41,7 @@ class NotificationSettingsModel {
       dailyReminderTime: json['dailyReminderTime'] as String? ?? json['reminderTime'] as String? ?? '08:00',
       medicineReminderTime: json['medicineReminderTime'] as String? ?? '12:00',
       glucoseReminderTime: json['glucoseReminderTime'] as String? ?? '18:00',
-      updatedAt: (json['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      updatedAt: parsedDate,
     );
   }
 

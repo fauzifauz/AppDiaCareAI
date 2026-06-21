@@ -10,6 +10,9 @@ import '../../providers/notification_provider.dart';
 import '../../repositories/database_repository.dart';
 import '../../services/fcm_service.dart';
 import 'explainable_ai_screen.dart';
+import '../../models/risk_prediction.dart';
+import '../../utils/explainable_ai_helper.dart';
+import '../../services/tflite_prediction_service.dart';
 
 class RiskPredictionScreen extends StatefulWidget {
   const RiskPredictionScreen({super.key});
@@ -38,11 +41,13 @@ class _RiskPredictionScreenState extends State<RiskPredictionScreen> {
 
   // Loading and result states
   bool _isLoading = false;
-  String _loadingText = 'Menghubungkan ke AI Engine...';
+  String _loadingText = 'Menganalisis...';
   double? _computedRisk;
   double? _computedMetabolicScore;
   String? _computedRiskLevel;
   Color? _computedRiskColor;
+  List<String>? _computedRecommendations;
+  List<FeatureContribution>? _computedContributions;
 
   final List<String> _smokingOptions = [
     'Never',
@@ -86,6 +91,7 @@ class _RiskPredictionScreenState extends State<RiskPredictionScreen> {
   }
 
   void _submitForm() {
+    if (_isLoading) return;
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
@@ -117,7 +123,7 @@ class _RiskPredictionScreenState extends State<RiskPredictionScreen> {
         }
       });
 
-      Timer(const Duration(milliseconds: 2600), () {
+      Timer(const Duration(milliseconds: 2600), () async {
         if (!mounted) return;
 
         // Perform calculation
@@ -128,59 +134,50 @@ class _RiskPredictionScreenState extends State<RiskPredictionScreen> {
         final isHypertension = _hypertension == 'Ya';
         final isHeartDisease = _heartDisease == 'Ya';
 
-        // Base risk score calculations based on medical heuristics
-        double basePoints = 0;
-
-        // Age points (max 15)
-        basePoints += math.min(15.0, (age * 0.2));
-
-        // BMI points (max 15)
-        if (bmi >= 30) {
-          basePoints += 15;
-        } else if (bmi >= 25) {
-          basePoints += 8;
-        } else if (bmi < 18.5) {
-          basePoints += 2; // Underweight also minor metabolic disruption
+        double riskPercentage = 0.0;
+        List<double> rawShapValues = [];
+        try {
+          // Memastikan model TFLite termuat secara dinamis sebelum inferensi
+          if (!TflitePredictionService().isModelLoaded) {
+            await TflitePredictionService().initModel();
+          }
+          final result = TflitePredictionService().predict(
+            gender: _gender ?? 'Female',
+            age: age,
+            hypertension: isHypertension,
+            heartDisease: isHeartDisease,
+            smokingHistory: _smokingHistory ?? 'Never',
+            bmi: bmi,
+            hba1c: hba1c,
+            glucose: glucose,
+          );
+          riskPercentage = result['riskPercentage'] as double;
+          rawShapValues = List<double>.from(result['shapValues']);
+        } catch (e) {
+          debugPrint('RiskPredictionScreen: TFLite prediction failed ($e). Falling back to heuristic.');
+          // Fallback to manual prediction if TFLite fails or file is not found
+          double basePoints = 0;
+          basePoints += math.min(15.0, (age * 0.2));
+          if (bmi >= 30) basePoints += 15;
+          else if (bmi >= 25) basePoints += 8;
+          else if (bmi < 18.5) basePoints += 2;
+          if (isHypertension) basePoints += 12;
+          if (isHeartDisease) basePoints += 10;
+          if (_smokingHistory == 'Current' || _smokingHistory == 'Ever') basePoints += 6;
+          else if (_smokingHistory == 'Former' || _smokingHistory == 'Not Current') basePoints += 3;
+          if (hba1c >= 6.5) basePoints += 30;
+          else if (hba1c >= 5.7) basePoints += 15;
+          else if (hba1c >= 4.0) basePoints += 2;
+          if (glucose >= 200) basePoints += 25;
+          else if (glucose >= 140) basePoints += 15;
+          else if (glucose >= 100) basePoints += 5;
+          riskPercentage = basePoints;
+          if (riskPercentage < 2) riskPercentage = 2.0;
+          if (riskPercentage > 98) riskPercentage = 98.0;
         }
-
-        // Hypertension (12 points)
-        if (isHypertension) basePoints += 12;
-
-        // Heart Disease (10 points)
-        if (isHeartDisease) basePoints += 10;
-
-        // Smoking history points
-        if (_smokingHistory == 'Current' || _smokingHistory == 'Ever') {
-          basePoints += 6;
-        } else if (_smokingHistory == 'Former' || _smokingHistory == 'Not Current') {
-          basePoints += 3;
-        }
-
-        // HbA1c points (very strong factor, max 30)
-        if (hba1c >= 6.5) {
-          basePoints += 30;
-        } else if (hba1c >= 5.7) {
-          basePoints += 15;
-        } else if (hba1c >= 4.0) {
-          basePoints += 2;
-        }
-
-        // Blood Glucose points (strong factor, max 25)
-        if (glucose >= 200) {
-          basePoints += 25;
-        } else if (glucose >= 140) {
-          basePoints += 15;
-        } else if (glucose >= 100) {
-          basePoints += 5;
-        }
-
-        // Final score calculation
-        double riskPercentage = basePoints;
-        if (riskPercentage < 2) riskPercentage = 2.0;
-        if (riskPercentage > 98) riskPercentage = 98.0;
 
         // Metabolic score out of 100
-        double metScore = 100 - (basePoints * 0.7);
+        double metScore = 100 - riskPercentage;
         if (metScore < 10) metScore = 10.0;
         if (metScore > 98) metScore = 98.0;
 
@@ -198,12 +195,43 @@ class _RiskPredictionScreenState extends State<RiskPredictionScreen> {
           levelColor = const Color(0xFFEF4444); // Red
         }
 
+        final tips = _generateAiTips(riskPercentage);
+        
+        final contributions = rawShapValues.isNotEmpty
+            ? ExplainableAiHelper.mapRawShapToContributions(
+                rawShapValues: rawShapValues,
+                risk: riskPercentage,
+                gender: _gender,
+                age: age,
+                hypertension: _hypertension,
+                heartDisease: _heartDisease,
+                smokingHistory: _smokingHistory,
+                bmi: bmi,
+                hba1c: hba1c,
+                glucose: glucose,
+              )
+            : ExplainableAiHelper.calculateContributions(
+                risk: riskPercentage,
+                gender: _gender,
+                age: age,
+                hypertension: _hypertension,
+                heartDisease: _heartDisease,
+                smokingHistory: _smokingHistory,
+                bmi: bmi,
+                hba1c: hba1c,
+                glucose: glucose,
+              );
+              
+        const modelTransparency = 'Model prediksi DiaCare AI dibangun menggunakan arsitektur XGBoost (Extreme Gradient Boosting) yang dikonversi ke format TensorFlow Lite dan dijalankan secara lokal di perangkat. Penjelasan Explainable AI (XAI) dihasilkan secara real-time melalui nilai SHAP (SHapley Additive exPlanations) untuk menjamin transparansi analisis klinis bagi tenaga medis dan pengguna.';
+
         setState(() {
           _isLoading = false;
           _computedRisk = riskPercentage;
           _computedMetabolicScore = metScore;
           _computedRiskLevel = level;
           _computedRiskColor = levelColor;
+          _computedRecommendations = tips;
+          _computedContributions = contributions;
         });
 
         // Save prediction history if storeHistory is enabled
@@ -211,6 +239,9 @@ class _RiskPredictionScreenState extends State<RiskPredictionScreen> {
           riskPercentage: riskPercentage,
           metabolicScore: metScore,
           riskLevel: level,
+          recommendations: tips,
+          contributions: contributions,
+          modelTransparency: modelTransparency,
         );
       });
     }
@@ -220,11 +251,11 @@ class _RiskPredictionScreenState extends State<RiskPredictionScreen> {
     required double riskPercentage,
     required double metabolicScore,
     required String riskLevel,
+    required List<String> recommendations,
+    required List<FeatureContribution> contributions,
+    required String modelTransparency,
   }) async {
     if (!mounted) return;
-    final privacyProvider = context.read<PrivacyProvider>();
-    final storeHistory = privacyProvider.settings?.storeHistory ?? true;
-    if (!storeHistory) return;
 
     final uid = context.read<AuthProvider>().firebaseUser?.uid;
     if (uid == null) return;
@@ -242,6 +273,9 @@ class _RiskPredictionScreenState extends State<RiskPredictionScreen> {
       'hypertension': _hypertension == 'Ya',
       'heartDisease': _heartDisease == 'Ya',
       'smokingHistory': _smokingHistory ?? '',
+      'recommendations': recommendations,
+      'contributions': contributions.map((c) => c.toJson()).toList(),
+      'modelTransparency': modelTransparency,
     };
 
     try {
@@ -648,7 +682,7 @@ class _RiskPredictionScreenState extends State<RiskPredictionScreen> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: _submitForm,
+                  onPressed: _isLoading ? null : _submitForm,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primaryBlue,
                     foregroundColor: Colors.white,
@@ -733,7 +767,7 @@ class _RiskPredictionScreenState extends State<RiskPredictionScreen> {
                               ),
                             ),
                             Text(
-                              'RISIKO DIABETES',
+                              'INDIKATOR RISIKO',
                               style: GoogleFonts.inter(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
@@ -856,7 +890,7 @@ class _RiskPredictionScreenState extends State<RiskPredictionScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  ..._generateAiTips(risk).map((tip) => Padding(
+                  ...(_computedRecommendations ?? _generateAiTips(risk)).map((tip) => Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -901,6 +935,8 @@ class _RiskPredictionScreenState extends State<RiskPredictionScreen> {
                         bmi: double.tryParse(_bmiController.text) ?? 22.0,
                         hba1c: double.tryParse(_hba1cController.text) ?? 5.5,
                         glucose: double.tryParse(_glucoseController.text) ?? 100.0,
+                        savedContributions: _computedContributions,
+                        savedModelTransparency: 'Model prediksi DiaCare AI dibangun menggunakan arsitektur XGBoost (Extreme Gradient Boosting) yang dikonversi ke format TensorFlow Lite dan dijalankan secara lokal di perangkat. Penjelasan Explainable AI (XAI) dihasilkan secara real-time melalui nilai SHAP (SHapley Additive exPlanations) untuk menjamin transparansi analisis klinis bagi tenaga medis dan pengguna.',
                       ),
                     ),
                   );
@@ -1242,28 +1278,56 @@ class _RiskPredictionScreenState extends State<RiskPredictionScreen> {
     final bmi = double.tryParse(_bmiController.text) ?? 22.0;
     final glucose = double.tryParse(_glucoseController.text) ?? 100.0;
     final hba1c = double.tryParse(_hba1cController.text) ?? 5.5;
+    final isHypertension = _hypertension == 'Ya';
+    final isHeart = _heartDisease == 'Ya';
+    final isCurrentSmoker = _smokingHistory == 'Current';
 
     if (risk < 20) {
-      tips.add('Lanjutkan aktivitas fisik teratur Anda.');
-      tips.add('Jaga asupan serat harian di atas 25 gram.');
-      tips.add('Lakukan pemeriksaan glukosa berkala minimal 6 bulan sekali.');
-    } else {
+      // RISIKO RENDAH
+      tips.add('Jaga pola makan sehat gizi seimbang dengan asupan serat harian minimal 25 gram dan batasi makanan manis.');
+      tips.add('Pertahankan aktivitas fisik aerobik intensitas sedang minimal 150 menit per minggu (jalan cepat, bersepeda).');
       if (bmi >= 25.0) {
-        tips.add('Fokus menurunkan berat badan 5-10% dari berat saat ini untuk meningkatkan sensitivitas insulin.');
+        tips.add('BMI Anda terdeteksi berlebih (${bmi.toStringAsFixed(1)}). Upayakan menjaga porsi makan stabil agar berat badan tidak terus naik.');
+      } else {
+        tips.add('Lakukan pemeriksaan profil gula darah (GDP/HbA1c) secara berkala setiap 6-12 bulan sekali.');
       }
-      if (glucose >= 126.0 || hba1c >= 6.5) {
-        tips.add('Konsultasikan dengan dokter terkait hasil laboratorium yang berada di atas ambang batas normal.');
+      if (isCurrentSmoker) {
+        tips.add('Pertimbangkan untuk berhenti merokok untuk menjaga metabolisme tubuh tetap prima.');
       }
-      if (_smokingHistory == 'Current') {
-        tips.add('Kurangi atau hentikan merokok secara bertahap karena meningkatkan komplikasi kardiovaskular secara drastis.');
+    } else if (risk < 50) {
+      // RISIKO SEDANG
+      tips.add('Kurangi konsumsi karbohidrat sederhana (nasi putih berlebih, tepung) dan ganti dengan karbohidrat kompleks (beras merah, oat).');
+      tips.add('Tingkatkan intensitas olahraga aerobik sedang menjadi 30 menit per hari, minimal 5 hari dalam seminggu.');
+      if (bmi >= 25.0) {
+        tips.add('Targetkan penurunan berat badan secara bertahap 5-7% untuk mengembalikan sensitivitas tubuh terhadap insulin.');
       }
-      if (_hypertension == 'Ya') {
-        tips.add('Batasi asupan garam/sodium maksimal 2000mg per hari untuk menjaga tekanan darah stabil.');
+      if (isHypertension) {
+        tips.add('Kurangi konsumsi natrium/garam dapur maksimal 1 sendok teh (2.000 mg natrium) per hari untuk mengontrol tekanan darah.');
       }
-      tips.add('Utamakan karbohidrat kompleks (oat, beras merah, sayuran) dibanding karbohidrat sederhana.');
-      tips.add('Lakukan olahraga aerobik (seperti jalan cepat) selama 30 menit per hari.');
+      if (isCurrentSmoker) {
+        tips.add('Upayakan berhenti merokok secara bertahap guna menghindari risiko komplikasi penyumbatan pembuluh darah.');
+      }
+      if (glucose >= 100 || hba1c >= 5.7) {
+        tips.add('Kadar parameter klinis Anda masuk kategori prediabetes. Lakukan pemantauan kadar gula secara mandiri.');
+      }
+    } else {
+      // RISIKO TINGGI
+      tips.add('Sangat disarankan untuk segera berkonsultasi dengan Dokter Spesialis Penyakit Dalam untuk pemeriksaan klinis komprehensif.');
+      tips.add('Batasi ketat segala bentuk camilan manis, soda, jus kemasan, dan kurangi porsi karbohidrat olahan secara disiplin.');
+      tips.add('Lakukan pemantauan kadar gula darah secara mandiri di rumah (sebelum dan 2 jam setelah makan).');
+      if (bmi >= 25.0) {
+        tips.add('Wajib menurunkan berat badan secara aktif melalui kombinasi asupan kalori terkontrol dan latihan fisik terstruktur.');
+      }
+      if (isHypertension || isHeart) {
+        tips.add('Patuhi pengobatan tekanan darah/jantung Anda secara rutin untuk mencegah komplikasi kardiovaskular yang fatal.');
+      }
+      if (isCurrentSmoker) {
+        tips.add('Hentikan konsumsi rokok sepenuhnya karena kombinasi rokok dan risiko diabetes tinggi melipatgandakan risiko serangan jantung.');
+      }
     }
-    return tips.take(3).toList();
+
+    // Return the top 4 highly relevant tips
+    return tips.take(4).toList();
   }
 }
 

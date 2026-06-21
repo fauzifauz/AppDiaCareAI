@@ -8,6 +8,7 @@ class HealthRecord {
   final double heartRate;
   final double weight;
   final double bmi;
+  final int steps;
   final String notes;
   final String timestamp;
 
@@ -18,6 +19,7 @@ class HealthRecord {
     required this.heartRate,
     required this.weight,
     required this.bmi,
+    required this.steps,
     required this.notes,
     required this.timestamp,
   });
@@ -31,6 +33,7 @@ class HealthRecord {
       heartRate: (json['heartRate'] as num?)?.toDouble() ?? 0.0,
       weight: (json['weight'] as num?)?.toDouble() ?? 0.0,
       bmi: (json['bmi'] as num?)?.toDouble() ?? 0.0,
+      steps: (json['steps'] as num?)?.toInt() ?? 0,
       notes: json['notes']?.toString() ?? '',
       timestamp: json['timestamp']?.toString() ?? '',
     );
@@ -45,6 +48,7 @@ class HealthRecord {
       'heartRate': heartRate,
       'weight': weight,
       'bmi': bmi,
+      'steps': steps,
       'notes': notes,
       'timestamp': timestamp,
     };
@@ -58,6 +62,7 @@ class HealthRecord {
     double? heartRate,
     double? weight,
     double? bmi,
+    int? steps,
     String? notes,
     String? timestamp,
   }) {
@@ -68,6 +73,7 @@ class HealthRecord {
       heartRate: heartRate ?? this.heartRate,
       weight: weight ?? this.weight,
       bmi: bmi ?? this.bmi,
+      steps: steps ?? this.steps,
       notes: notes ?? this.notes,
       timestamp: timestamp ?? this.timestamp,
     );
