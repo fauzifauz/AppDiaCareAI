@@ -22,8 +22,8 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
   String _appVersion = '1.0.0';
   String _buildNumber = '1';
 
-  static const String _supportEmail = 'support@diacare.ai';
-  static const String _whatsappNumber = '+6281234567890';
+  static const String _supportEmail = 'diacarea@gmail.com';
+  static const String _whatsappNumber = '+62895411927894';
 
   @override
   void initState() {

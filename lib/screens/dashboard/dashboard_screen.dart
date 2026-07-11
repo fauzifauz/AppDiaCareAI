@@ -175,7 +175,6 @@ class _HomeContentState extends State<_HomeContent>
   
   final FirebaseSensorService _sensorService = FirebaseSensorService();
   final DatabaseRepository _dbRepository = DatabaseRepository();
-  bool _isSimulating = false;
   DateTime? _lastSensorSave;
 
   @override
@@ -1616,7 +1615,7 @@ class _HomeContentState extends State<_HomeContent>
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
-                  'LIVE MONITORING',
+                  'PEMANTAUAN HARIAN',
                   style: GoogleFonts.inter(
                     fontSize: 9,
                     fontWeight: FontWeight.w800,
@@ -1650,60 +1649,31 @@ class _HomeContentState extends State<_HomeContent>
         ),
         const SizedBox(width: 8),
         GestureDetector(
-          onTap: () {
-            setState(() {
-              _isSimulating = !_isSimulating;
-              if (_isSimulating) {
-                _sensorService.startSimulation();
-              } else {
-                _sensorService.stopSimulation();
-              }
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  _isSimulating 
-                    ? 'Simulasi data sensor IoT dimulai!' 
-                    : 'Simulasi data sensor IoT dihentikan.',
-                  style: GoogleFonts.inter(fontWeight: FontWeight.w600),
-                ),
-                backgroundColor: _isSimulating ? AppTheme.accentGreen : AppTheme.darkNavy,
-                behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 2),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            );
-          },
+          onTap: () => _showManualInputDialog(),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: _isSimulating 
-                ? AppTheme.accentGreen.withOpacity(0.1) 
-                : AppTheme.primaryBlue.withOpacity(0.08),
+              color: AppTheme.primaryBlue.withOpacity(0.08),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: _isSimulating 
-                  ? AppTheme.accentGreen.withOpacity(0.3) 
-                  : AppTheme.primaryBlue.withOpacity(0.15),
+                color: AppTheme.primaryBlue.withOpacity(0.15),
               ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  _isSimulating ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                const Icon(
+                  Icons.add_circle_outline_rounded,
                   size: 14,
-                  color: _isSimulating ? AppTheme.accentGreen : AppTheme.primaryBlue,
+                  color: AppTheme.primaryBlue,
                 ),
-                const SizedBox(width: 2),
+                const SizedBox(width: 4),
                 Text(
-                  _isSimulating ? 'Stop Simulasi' : 'Simulasi IoT',
+                  'Catat Data',
                   style: GoogleFonts.inter(
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
-                    color: _isSimulating ? AppTheme.accentGreen : AppTheme.primaryBlue,
+                    color: AppTheme.primaryBlue,
                   ),
                 ),
               ],
@@ -1711,6 +1681,199 @@ class _HomeContentState extends State<_HomeContent>
           ),
         ),
       ],
+    );
+  }
+
+  void _showManualInputDialog() {
+    final glucoseCtrl = TextEditingController();
+    final tempCtrl = TextEditingController();
+    final humidityCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE2E8F0),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryBlue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(Icons.edit_note_rounded, color: AppTheme.primaryBlue, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Catat Data Kesehatan', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.textDark)),
+                        Text('Input data pengukuran manual Anda', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textGrey)),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                _buildInputField(
+                  controller: glucoseCtrl,
+                  label: 'Gula Darah (mg/dL)',
+                  hint: 'contoh: 95',
+                  icon: Icons.water_drop_outlined,
+                  iconColor: const Color(0xFF2563EB),
+                  keyboardType: TextInputType.number,
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Wajib diisi';
+                    final val = double.tryParse(v);
+                    if (val == null || val < 30 || val > 600) return 'Masukkan nilai 30–600 mg/dL';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 14),
+                _buildInputField(
+                  controller: tempCtrl,
+                  label: 'Suhu Tubuh (°C)',
+                  hint: 'contoh: 36.5',
+                  icon: Icons.thermostat_rounded,
+                  iconColor: const Color(0xFFF59E0B),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Wajib diisi';
+                    final val = double.tryParse(v);
+                    if (val == null || val < 30 || val > 43) return 'Masukkan nilai 30–43 °C';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 14),
+                _buildInputField(
+                  controller: humidityCtrl,
+                  label: 'Kelembaban Udara (%)',
+                  hint: 'contoh: 60',
+                  icon: Icons.water_drop_rounded,
+                  iconColor: const Color(0xFF06B6D4),
+                  keyboardType: TextInputType.number,
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Wajib diisi';
+                    final val = double.tryParse(v);
+                    if (val == null || val < 0 || val > 100) return 'Masukkan nilai 0–100%';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.save_rounded, size: 18),
+                    label: Text('Simpan Data Kesehatan', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryBlue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                    onPressed: () async {
+                      if (!formKey.currentState!.validate()) return;
+                      Navigator.pop(ctx);
+                      try {
+                        await _sensorService.updateSensorData(
+                          glucose: double.parse(glucoseCtrl.text),
+                          temperature: double.parse(tempCtrl.text),
+                          humidity: double.parse(humidityCtrl.text),
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Row(
+                                children: [
+                                  const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                                  const SizedBox(width: 8),
+                                  Text('Data kesehatan berhasil disimpan!', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                              backgroundColor: AppTheme.accentGreen,
+                              behavior: SnackBarBehavior.floating,
+                              duration: const Duration(seconds: 3),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Gagal menyimpan data: $e', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                              backgroundColor: const Color(0xFFDC2626),
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInputField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    required Color iconColor,
+    required TextInputType keyboardType,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      validator: validator,
+      style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textDark),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        labelStyle: GoogleFonts.inter(fontSize: 13, color: AppTheme.textGrey),
+        hintStyle: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLight),
+        prefixIcon: Icon(icon, color: iconColor, size: 20),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: AppTheme.primaryBlue, width: 1.5)),
+        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFDC2626))),
+        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      ),
     );
   }
 
@@ -1750,7 +1913,7 @@ class _HomeContentState extends State<_HomeContent>
           ),
           const SizedBox(height: 16),
           Text(
-            'Menghubungkan ke sensor IoT...',
+            'Memuat data kesehatan Anda...',
             style: GoogleFonts.inter(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -1759,7 +1922,7 @@ class _HomeContentState extends State<_HomeContent>
           ),
           const SizedBox(height: 4),
           Text(
-            'Mengambil data dari Firebase Realtime Database',
+            'Menyinkronkan data dengan cloud',
             style: GoogleFonts.inter(
               fontSize: 11,
               color: AppTheme.textGrey,
@@ -1776,72 +1939,68 @@ class _HomeContentState extends State<_HomeContent>
       padding: const EdgeInsets.all(24),
       margin: const EdgeInsets.only(top: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFFEE2E2),
+        color: const Color(0xFFFFF7ED),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFFCA5A5)),
+        border: Border.all(color: const Color(0xFFFBBF24)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 24),
+              const Icon(Icons.cloud_off_rounded, color: Color(0xFFD97706), size: 24),
               const SizedBox(width: 8),
               Text(
-                'Koneksi Gagal',
+                'Belum Ada Data',
                 style: GoogleFonts.inter(
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
-                  color: const Color(0xFF991B1B),
+                  color: const Color(0xFF92400E),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            'Gagal sinkronisasi dengan database IoT: $error',
+            'Data kesehatan harian Anda belum tersedia. Mulai catat pengukuran pertama Anda hari ini.',
             style: GoogleFonts.inter(
               fontSize: 13,
-              color: const Color(0xFF7F1D1D),
+              color: const Color(0xFF78350F),
               height: 1.4,
             ),
           ),
           const SizedBox(height: 16),
           Row(
             children: [
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {});
-                },
+              ElevatedButton.icon(
+                icon: const Icon(Icons.add_rounded, size: 16),
+                label: const Text('Catat Sekarang'),
+                onPressed: () => _showManualInputDialog(),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFDC2626),
+                  backgroundColor: const Color(0xFFD97706),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
+                  elevation: 0,
                 ),
-                child: const Text('Coba Lagi'),
               ),
               const SizedBox(width: 12),
-              OutlinedButton(
-                onPressed: () {
-                  setState(() {
-                    _isSimulating = true;
-                    _sensorService.startSimulation();
-                  });
-                },
+              OutlinedButton.icon(
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Muat Ulang'),
+                onPressed: () => setState(() {}),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF7F1D1D),
-                  side: const BorderSide(color: Color(0xFFFCA5A5)),
+                  foregroundColor: const Color(0xFF92400E),
+                  side: const BorderSide(color: Color(0xFFFBBF24)),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text('Gunakan Simulasi'),
               ),
             ],
           ),
@@ -1912,7 +2071,19 @@ class _HomeContentState extends State<_HomeContent>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Halo, $name 👋', style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.textDark, letterSpacing: -0.5)),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Halo, $name 👋',
+                        style: GoogleFonts.inter(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textDark,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 2),
                     Text(subtitle, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500, color: AppTheme.textGrey), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
@@ -1921,6 +2092,7 @@ class _HomeContentState extends State<_HomeContent>
             ],
           ),
         ),
+        const SizedBox(width: 16),
         Row(
           children: [
             GestureDetector(

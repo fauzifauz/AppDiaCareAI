@@ -222,7 +222,7 @@ class _LoginScreenState extends State<LoginScreen>
                                       color: AppTheme.textDark,
                                     ),
                                     decoration: InputDecoration(
-                                      hintText: 'demo@email.com',
+                                      hintText: 'nama@email.com',
                                       hintStyle: GoogleFonts.inter(
                                         color: Colors.grey.shade400,
                                       ),
