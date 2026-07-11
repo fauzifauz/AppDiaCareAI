@@ -64,8 +64,8 @@ android {
             )
         }
         debug {
-            applicationIdSuffix = ".debug"
-            versionNameSuffix = "-debug"
+            // applicationIdSuffix removed: google-services.json only registers
+            // 'com.diacare.ai' — adding a suffix causes a package name mismatch.
         }
     }
 }

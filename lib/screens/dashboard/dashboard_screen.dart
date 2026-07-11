@@ -782,18 +782,21 @@ class _HomeContentState extends State<_HomeContent>
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Row(
+                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Notifikasi Kesehatan',
-                        style: GoogleFonts.inter(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textDark,
+                      Expanded(
+                        child: Text(
+                          'Notifikasi Kesehatan',
+                          style: GoogleFonts.inter(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.textDark,
+                          ),
                         ),
                       ),
-                      if (unreadCount > 0)
+                      if (unreadCount > 0) ...[
+                        const SizedBox(width: 8),
                         TextButton(
                           onPressed: () {
                             setModalState(() {
@@ -813,6 +816,7 @@ class _HomeContentState extends State<_HomeContent>
                             ),
                           ),
                         ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -1510,17 +1514,30 @@ class _HomeContentState extends State<_HomeContent>
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            _buildSummaryItem('Gula Darah', '${record.glucoseLevel.toInt()} mg/dL', record.glucoseStatus == 'Normal' ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
-                            _buildSummaryItem('Tekanan Darah', record.bloodPressure.isNotEmpty ? record.bloodPressure : '--', AppTheme.textDark),
-                            _buildSummaryItem('Denyut Jantung', '${record.heartRate.toInt()} bpm', AppTheme.textDark),
+                            Expanded(
+                              child: _buildSummaryItem('Gula Darah', '${record.glucoseLevel.toInt()} mg/dL', record.glucoseStatus == 'Normal' ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildSummaryItem('Tekanan Darah', record.bloodPressure.isNotEmpty ? record.bloodPressure : '--', AppTheme.textDark),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildSummaryItem('Denyut Jantung', '${record.heartRate.toInt()} bpm', AppTheme.textDark),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 14),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            _buildSummaryItem('Berat Badan', '${record.weight} kg', AppTheme.textDark),
-                            _buildSummaryItem('BMI (Status)', '${record.bmi.toStringAsFixed(1)} (${record.bmiStatus})', record.bmiStatus == 'Normal' ? const Color(0xFF16A34A) : const Color(0xFFD97706)),
+                            Expanded(
+                              child: _buildSummaryItem('Berat Badan', '${record.weight} kg', AppTheme.textDark),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildSummaryItem('BMI (Status)', '${record.bmi.toStringAsFixed(1)} (${record.bmiStatus})', record.bmiStatus == 'Normal' ? const Color(0xFF16A34A) : const Color(0xFFD97706)),
+                            ),
                           ],
                         ),
                         if (record.notes.isNotEmpty) ...[
@@ -1590,6 +1607,8 @@ class _HomeContentState extends State<_HomeContent>
             fontWeight: FontWeight.w600,
             color: AppTheme.textGrey,
           ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 2),
         Text(
@@ -1599,6 +1618,8 @@ class _HomeContentState extends State<_HomeContent>
             fontWeight: FontWeight.w800,
             color: valueColor,
           ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );

@@ -52,7 +52,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyCNLjShoGXxW6wmC930HNg8aiO1JzPi6vw',
-    appId: '1:602563067692:android:08990ba4beee53dcb73689',
+    appId: '1:602563067692:android:26f59486a4c989d0b73689',
     messagingSenderId: '602563067692',
     projectId: 'diacareai-e8700',
     databaseURL: 'https://diacareai-e8700-default-rtdb.firebaseio.com',

@@ -487,7 +487,10 @@ class _RiskPredictionScreenState extends State<RiskPredictionScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _buildFieldLabel('Indeks Massa Tubuh (BMI)'),
+                        Expanded(
+                          child: _buildFieldLabel('Indeks Massa Tubuh (BMI)'),
+                        ),
+                        const SizedBox(width: 8),
                         GestureDetector(
                           onTap: () {
                             setState(() {
