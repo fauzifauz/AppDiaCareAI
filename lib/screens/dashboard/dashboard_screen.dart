@@ -320,6 +320,27 @@ class _HomeContentState extends State<_HomeContent>
       return !_hasReadNotifications && !_readNotificationIds.contains(uniqueKey);
     }
 
+    // Helper: format a date relative to now. Falls back to 'Baru saja' for very new dates.
+    String _relativeLabel(String isoString) {
+      if (isoString.isEmpty) return 'Baru saja';
+      try {
+        final dt = DateTime.parse(isoString).toLocal();
+        final diff = DateTime.now().difference(dt);
+        if (diff.inMinutes < 1) return 'Baru saja';
+        if (diff.inMinutes < 60) return '${diff.inMinutes} menit yang lalu';
+        if (diff.inHours < 24) return '${diff.inHours} jam yang lalu';
+        if (diff.inDays == 1) return '1 hari yang lalu';
+        return '${diff.inDays} hari yang lalu';
+      } catch (_) {
+        return 'Baru saja';
+      }
+    }
+
+    // Retrieve user registration date to compute relative labels correctly
+    final authProvider = context.read<AuthProvider>();
+    final registeredAt = authProvider.userProfile?.createdAt ?? '';
+    final screeningTime = _relativeLabel(registeredAt);
+
     // 1. Skrining Diabetes / Health screening reminder
     const titleScreening = 'Skrining Diabetes AI';
     const keyScreening = 'Skrining Diabetes AI';
@@ -328,7 +349,7 @@ class _HomeContentState extends State<_HomeContent>
       color: const Color(0xFF8B5CF6),
       title: titleScreening,
       desc: 'Lakukan pemindaian risiko diabetes secara berkala menggunakan fitur prediksi cerdas AI kami.',
-      time: '3 hari yang lalu',
+      time: screeningTime,
       isNew: isUnread(keyScreening),
       uniqueKey: keyScreening,
       onTap: () {
@@ -363,12 +384,16 @@ class _HomeContentState extends State<_HomeContent>
       // Reappear daily if they still haven't updated
       final todayStr = DateTime.now().toIso8601String().substring(0, 10);
       final keyUpdateData = 'Pembaruan Metrik Medis_$todayStr';
+      // For new users (no records), the reminder appeared right at registration
+      final reminderTime = records.isEmpty ? screeningTime : '1 hari yang lalu';
       list.add(HealthNotification(
         icon: Icons.edit_note_rounded,
         color: const Color(0xFFEF4444),
         title: titleUpdateData,
-        desc: 'Sudah lebih dari 24 jam sejak pencatatan terakhir. Perbarui data gula darah dan aktivitas harian Anda sekarang.',
-        time: '1 hari yang lalu',
+        desc: records.isEmpty
+            ? 'Belum ada data yang dicatat. Mulai catat gula darah dan aktivitas harian pertama Anda sekarang!'
+            : 'Sudah lebih dari 24 jam sejak pencatatan terakhir. Perbarui data gula darah dan aktivitas harian Anda sekarang.',
+        time: reminderTime,
         isNew: isUnread(keyUpdateData),
         uniqueKey: keyUpdateData,
         onTap: () {
@@ -477,7 +502,7 @@ class _HomeContentState extends State<_HomeContent>
       color: const Color(0xFFF59E0B),
       title: titleEducation,
       desc: 'Ketahui bahaya paparan gula darah tinggi secara kronis terhadap sistem syaraf dan pembuluh darah tubuh.',
-      time: '5 hari yang lalu',
+      time: screeningTime,
       isNew: isUnread(keyEducation),
       uniqueKey: keyEducation,
       onTap: () {

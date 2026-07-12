@@ -258,16 +258,31 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ),
         GestureDetector(
           onTap: () {
+            final latestPrediction = provider.predictions.isNotEmpty ? provider.predictions.first : null;
+            final riskLevelVal = latestPrediction != null ? latestPrediction.riskLevel : (avgGlucose > 140 ? 'Risiko Tinggi' : (avgGlucose > 110 ? 'Risiko Sedang' : 'Risiko Rendah'));
+            final riskPercentageVal = latestPrediction != null ? latestPrediction.riskPercentage : (avgGlucose > 140 ? 55.0 : (avgGlucose > 110 ? 30.0 : 12.0));
+            final metabolicScoreVal = latestPrediction != null ? latestPrediction.metabolicScore : (avgGlucose > 140 ? 65.0 : (avgGlucose > 110 ? 78.0 : 88.0));
+
+            String formatSteps(double steps) {
+              final intVal = steps.toInt();
+              if (intVal >= 1000) {
+                final str = intVal.toString();
+                final len = str.length;
+                return '${str.substring(0, len - 3)},${str.substring(len - 3)}';
+              }
+              return intVal.toString();
+            }
+
             Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => ReportPreviewScreen(
                   name: name,
-                  riskLevel: avgGlucose > 140 ? 'Risiko Tinggi' : (avgGlucose > 110 ? 'Risiko Sedang' : 'Risiko Rendah'),
-                  riskPercentage: avgGlucose > 140 ? 55.0 : (avgGlucose > 110 ? 30.0 : 12.0),
-                  metabolicScore: avgGlucose > 140 ? 65.0 : (avgGlucose > 110 ? 78.0 : 88.0),
+                  riskLevel: riskLevelVal,
+                  riskPercentage: riskPercentageVal,
+                  metabolicScore: metabolicScoreVal,
                   averageGlucose: avgGlucose > 0 ? avgGlucose.toStringAsFixed(0) : '0',
-                  averageSteps: '8,100',
+                  averageSteps: formatSteps(provider.averageSteps),
                   warningCount: warningCount,
                   historyEntries: [
                     ...provider.records.map((r) => {
@@ -283,7 +298,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       'status': p.riskLevel,
                     }),
                   ],
-
                 ),
               ),
             );
@@ -739,7 +753,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildChartSection(HealthProvider provider) {
-    List<double> glucoseData = [94.0, 118.0, 142.0, 98.0, 152.0, 96.0, 105.0];
+    List<double> glucoseData = [];
     if (provider.records.isNotEmpty) {
       final records = provider.records.take(7).toList();
       if (records.length >= 2) {
@@ -748,9 +762,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
         glucoseData = [records[0].glucoseLevel, records[0].glucoseLevel];
       }
     }
-    final double averageVal = glucoseData.reduce((a, b) => a + b) / glucoseData.length;
+    final double averageVal = glucoseData.isNotEmpty
+        ? glucoseData.reduce((a, b) => a + b) / glucoseData.length
+        : 0.0;
 
-    List<double> activityData = [8400, 9200, 5100, 8900, 6800, 10100, 8200];
+    List<double> activityData = [];
     if (provider.records.isNotEmpty) {
       final records = provider.records.take(7).toList();
       if (records.length >= 2) {
@@ -760,7 +776,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       }
     }
 
-    List<double> riskData = [12.0, 15.0, 18.0, 14.0, 22.0, 13.0, 12.0];
+    List<double> riskData = [];
     if (provider.predictions.isNotEmpty) {
       final sortedPredictions = List<RiskPredictionModel>.from(provider.predictions)
         ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
@@ -774,7 +790,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
         }
       }
     }
-    final double averageRisk = riskData.reduce((a, b) => a + b) / riskData.length;
+    final double averageRisk = riskData.isNotEmpty
+        ? riskData.reduce((a, b) => a + b) / riskData.length
+        : 0.0;
+
+    final bool hasRecords = provider.records.isNotEmpty;
+    final bool hasPredictions = provider.predictions.isNotEmpty;
 
     final double screenWidth = MediaQuery.of(context).size.width;
     final List<String> activeFiltersForCharts = [];
@@ -797,63 +818,69 @@ class _HistoryScreenState extends State<HistoryScreen> {
       
       Widget card;
       if (f == 'Glukosa') {
-        card = _buildSingleChartCard(
-          width: cardWidth,
-          title: 'Grafik Tren Glukosa Darah (7 Hari)',
-          averageLabel: 'Rerata: ${averageVal.toStringAsFixed(0)} mg/dL',
-          chart: CustomPaint(
-            painter: _GlucoseChartPainter(glucoseData),
-            size: Size.infinite,
-          ),
-          legend: Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 12,
-            runSpacing: 6,
-            children: [
-              _buildLegendItem(AppTheme.primaryBlue, 'Normal (70-130)'),
-              _buildLegendItem(const Color(0xFFEF4444), 'Tinggi (>130)'),
-            ],
-          ),
-        );
+        card = !hasRecords
+            ? _buildChartEmptyState(cardWidth, 'Grafik Tren Glukosa Darah', Icons.water_drop_rounded, 'Belum ada data gula darah.\nTambahkan catatan pertama Anda!')
+            : _buildSingleChartCard(
+                width: cardWidth,
+                title: 'Grafik Tren Glukosa Darah (7 Hari)',
+                averageLabel: 'Rerata: ${averageVal.toStringAsFixed(0)} mg/dL',
+                chart: CustomPaint(
+                  painter: _GlucoseChartPainter(glucoseData),
+                  size: Size.infinite,
+                ),
+                legend: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 12,
+                  runSpacing: 6,
+                  children: [
+                    _buildLegendItem(AppTheme.primaryBlue, 'Normal (70-130)'),
+                    _buildLegendItem(const Color(0xFFEF4444), 'Tinggi (>130)'),
+                  ],
+                ),
+              );
       } else if (f == 'Aktivitas') {
-        card = _buildSingleChartCard(
-          width: cardWidth,
-          title: 'Grafik Langkah Harian (7 Hari)',
-          averageLabel: 'Rerata: ${provider.averageSteps > 0 ? (provider.averageSteps >= 1000 ? (provider.averageSteps / 1000).toStringAsFixed(1) + 'k' : provider.averageSteps.toStringAsFixed(0)) : "--"}',
-          chart: CustomPaint(
-            painter: _ActivityChartPainter(activityData),
-            size: Size.infinite,
-          ),
-          legend: Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 12,
-            runSpacing: 6,
-            children: [
-              _buildLegendItem(AppTheme.primaryBlue, 'Tercapai (>= 8k)'),
-              _buildLegendItem(const Color(0xFFEF4444), 'Kurang (< 8k)'),
-            ],
-          ),
-        );
+        card = !hasRecords
+            ? _buildChartEmptyState(cardWidth, 'Grafik Langkah Harian', Icons.directions_run_rounded, 'Belum ada data aktivitas.\nMulai catat langkah harian Anda!')
+            : _buildSingleChartCard(
+                width: cardWidth,
+                title: 'Grafik Langkah Harian (7 Hari)',
+                averageLabel: 'Rerata: ${provider.averageSteps > 0 ? (provider.averageSteps >= 1000 ? (provider.averageSteps / 1000).toStringAsFixed(1) + "k" : provider.averageSteps.toStringAsFixed(0)) : "--"}',
+                chart: CustomPaint(
+                  painter: _ActivityChartPainter(activityData),
+                  size: Size.infinite,
+                ),
+                legend: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 12,
+                  runSpacing: 6,
+                  children: [
+                    _buildLegendItem(AppTheme.primaryBlue, 'Tercapai (>= 8k)'),
+                    _buildLegendItem(const Color(0xFFEF4444), 'Kurang (< 8k)'),
+                  ],
+                ),
+              );
       } else {
-        card = _buildSingleChartCard(
-          width: cardWidth,
-          title: 'Grafik Tren Risiko Diabetes AI',
-          averageLabel: 'Rerata: ${averageRisk.toStringAsFixed(1)}%',
-          chart: CustomPaint(
-            painter: _RiskChartPainter(riskData),
-            size: Size.infinite,
-          ),
-          legend: Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 12,
-            runSpacing: 6,
-            children: [
-              _buildLegendItem(const Color(0xFF16A34A), 'Rendah (<20%)'),
-              _buildLegendItem(const Color(0xFFF59E0B), 'Sedang (20%-49%)'),
-              _buildLegendItem(const Color(0xFFEF4444), 'Tinggi (>=50%)'),
-            ],
-          ),
-        );
+        card = !hasPredictions
+            ? _buildChartEmptyState(cardWidth, 'Grafik Tren Risiko Diabetes AI', Icons.psychology_rounded, 'Belum ada analisis AI.\nJalankan prediksi risiko pertama Anda!')
+            : _buildSingleChartCard(
+                width: cardWidth,
+                title: 'Grafik Tren Risiko Diabetes AI',
+                averageLabel: 'Rerata: ${averageRisk.toStringAsFixed(1)}%',
+                chart: CustomPaint(
+                  painter: _RiskChartPainter(riskData),
+                  size: Size.infinite,
+                ),
+                legend: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 12,
+                  runSpacing: 6,
+                  children: [
+                    _buildLegendItem(const Color(0xFF16A34A), 'Rendah (<20%)'),
+                    _buildLegendItem(const Color(0xFFF59E0B), 'Sedang (20%-49%)'),
+                    _buildLegendItem(const Color(0xFFEF4444), 'Tinggi (>=50%)'),
+                  ],
+                ),
+              );
       }
 
       chartWidgets.add(
@@ -898,6 +925,71 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildChartEmptyState(double width, String title, IconData icon, String message) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppTheme.borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.015),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.textDark,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            height: 180,
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryBlue.withOpacity(0.06),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: AppTheme.primaryBlue.withOpacity(0.4), size: 32),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppTheme.textGrey,
+                      height: 1.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
     );
   }
 

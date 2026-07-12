@@ -22,39 +22,14 @@ class ReportPreviewScreen extends StatefulWidget {
 
   const ReportPreviewScreen({
     super.key,
-    this.name = 'Alex',
+    this.name = 'Pengguna',
     this.riskLevel = 'Risiko Rendah',
-    this.riskPercentage = 12.0,
-    this.metabolicScore = 88.0,
-    this.averageGlucose = '104',
-    this.averageSteps = '8,100',
-    this.warningCount = 2,
-    this.historyEntries = const [
-      {
-        'title': 'Glukosa Setelah Makan',
-        'time': 'Hari ini, 13:15 WIB',
-        'value': '148 mg/dL',
-        'status': 'Tinggi',
-      },
-      {
-        'title': 'Aktivitas Langkah Harian',
-        'time': 'Hari ini, 10:00 WIB',
-        'value': '9,420 langkah',
-        'status': 'Target Tercapai',
-      },
-      {
-        'title': 'Analisis Risiko Diabetes AI',
-        'time': 'Kemarin, 16:30 WIB',
-        'value': 'Tingkat Risiko: 12%',
-        'status': 'Risiko Rendah',
-      },
-      {
-        'title': 'Glukosa Sebelum Makan',
-        'time': 'Kemarin, 08:00 WIB',
-        'value': '94 mg/dL',
-        'status': 'Normal',
-      },
-    ],
+    this.riskPercentage = 0.0,
+    this.metabolicScore = 100.0,
+    this.averageGlucose = '0',
+    this.averageSteps = '0',
+    this.warningCount = 0,
+    this.historyEntries = const [],
     this.avatarUrl = '',
     this.pickedImage,
   });
@@ -277,7 +252,9 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
     } else {
       riskColor = const Color(0xFF16A34A);
       riskTitle = 'Risiko Rendah';
-      riskDesc = 'Kadar glukosa Anda menunjukkan stabilitas tinggi selama 30 hari terakhir. Tidak ada anomali kritis.';
+      riskDesc = widget.historyEntries.isEmpty
+          ? 'Belum ada riwayat analisis risiko. Lakukan prediksi AI pertama Anda untuk memulai pemantauan.'
+          : 'Kadar glukosa Anda menunjukkan stabilitas tinggi. Tidak ada anomali kritis yang terdeteksi.';
     }
 
     return Scaffold(
@@ -408,7 +385,9 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
 
                 // Subtitle
                 Text(
-                  'Laporan kesehatan Anda untuk bulan ini telah berhasil dibuat dan dianalisis secara akurat.',
+                  widget.historyEntries.isEmpty
+                      ? 'Laporan ini disiapkan untuk akun Anda. Tambahkan data kesehatan untuk memperkaya laporan.'
+                      : 'Laporan kesehatan Anda telah berhasil dibuat dan dianalisis secara akurat.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(
                     fontSize: 14,

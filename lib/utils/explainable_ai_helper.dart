@@ -98,14 +98,44 @@ class ExplainableAiHelper {
       },
     ];
 
+    double sumPositive = 0;
+    double sumNegative = 0;
+    for (double w in rawShapValues) {
+      if (w > 0) {
+        sumPositive += w;
+      } else {
+        sumNegative += w.abs();
+      }
+    }
+
+    const double baseValue = 10.0;
+    double targetDiff = risk - baseValue;
+
     List<FeatureContribution> contributions = [];
 
-    // Lakukan penskalaan nilai SHAP mentah (log-odds/linear) ke skala persentase UI
     for (int i = 0; i < 8; i++) {
-      double rawWeight = rawShapValues[i];
-      
-      // Penskalaan nilai SHAP untuk visualisasi bar (persen)
-      double scaledPercentage = rawWeight * 10.0; // Kalibrasi visualisasi agar pas dengan UI
+      double w = rawShapValues[i];
+      double scaledPercentage = 0;
+      if (targetDiff >= 0) {
+        final factorNegative = (100.0 - risk) / (100.0 - baseValue);
+        if (w > 0) {
+          final sumNegativeNew = -sumNegative * factorNegative;
+          final sumPositiveNew = targetDiff - sumNegativeNew;
+          scaledPercentage = sumPositive > 0 ? w * sumPositiveNew / sumPositive : 0;
+        } else {
+          scaledPercentage = w * factorNegative;
+        }
+      } else {
+        final factorPositive = risk / baseValue;
+        if (w < 0) {
+          final sumPositiveNew = sumPositive * factorPositive;
+          final sumNegativeNew = targetDiff - sumPositiveNew;
+          scaledPercentage = sumNegative > 0 ? w * sumNegativeNew / (-sumNegative) : 0;
+        } else {
+          scaledPercentage = w * factorPositive;
+        }
+      }
+
       if (scaledPercentage > 45.0) scaledPercentage = 45.0;
       if (scaledPercentage < -25.0) scaledPercentage = -25.0;
 
@@ -123,7 +153,6 @@ class ExplainableAiHelper {
       );
     }
 
-    // Urutkan kontribusi terbesar (pemicu risiko paling dominan di atas)
     contributions.sort((a, b) => b.contributionPercentage.compareTo(a.contributionPercentage));
     return contributions;
   }
@@ -286,16 +315,22 @@ class ExplainableAiHelper {
       double w = f['rawWeight'] as double;
       double scaledWeight = 0;
       if (targetDiff >= 0) {
+        final factorNegative = (100.0 - risk) / (100.0 - baseValue);
         if (w > 0) {
-          scaledWeight = sumPositive > 0 ? w * (targetDiff + sumNegative) / sumPositive : 0;
+          final sumNegativeNew = -sumNegative * factorNegative;
+          final sumPositiveNew = targetDiff - sumNegativeNew;
+          scaledWeight = sumPositive > 0 ? w * sumPositiveNew / sumPositive : 0;
         } else {
-          scaledWeight = w;
+          scaledWeight = w * factorNegative;
         }
       } else {
+        final factorPositive = risk / baseValue;
         if (w < 0) {
-          scaledWeight = sumNegative > 0 ? w * (targetDiff.abs() + sumPositive) / sumNegative : 0;
+          final sumPositiveNew = sumPositive * factorPositive;
+          final sumNegativeNew = targetDiff - sumPositiveNew;
+          scaledWeight = sumNegative > 0 ? w * sumNegativeNew / (-sumNegative) : 0;
         } else {
-          scaledWeight = w;
+          scaledWeight = w * factorPositive;
         }
       }
 

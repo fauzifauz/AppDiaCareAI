@@ -390,6 +390,26 @@ class HealthReportService {
                     ),
                   ],
                 ),
+                if (historyEntries.isEmpty)
+                  pw.TableRow(
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(10),
+                        child: pw.Text(
+                          'Belum ada catatan aktivitas. Mulai catat data kesehatan Anda melalui aplikasi DiaCare AI.',
+                          style: pw.TextStyle(
+                            fontSize: 8.5,
+                            color: greyColor,
+                            fontStyle: pw.FontStyle.italic,
+                          ),
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ),
+                      pw.Padding(padding: const pw.EdgeInsets.all(10), child: pw.Text('-', style: pw.TextStyle(fontSize: 8, color: greyColor), textAlign: pw.TextAlign.center)),
+                      pw.Padding(padding: const pw.EdgeInsets.all(10), child: pw.Text('-', style: pw.TextStyle(fontSize: 8, color: greyColor), textAlign: pw.TextAlign.center)),
+                      pw.Padding(padding: const pw.EdgeInsets.all(10), child: pw.Text('-', style: pw.TextStyle(fontSize: 8, color: greyColor), textAlign: pw.TextAlign.center)),
+                    ],
+                  ),
                 ...historyEntries.map((e) {
                   final status = e['status'] ?? 'Normal';
                   final isHigh = status == 'Tinggi' || status == 'Target Kurang' || status == 'Risiko Sedang' || status == 'Risiko Tinggi';
