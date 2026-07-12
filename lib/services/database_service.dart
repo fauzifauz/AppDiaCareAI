@@ -342,4 +342,15 @@ class DatabaseService {
       throw Exception('Gagal mengunduh data pengguna.');
     }
   }
+
+  /// Permanently deletes the user node in Firebase Realtime Database.
+  Future<void> deleteUserData(String uid) async {
+    try {
+      await _db.ref('$_usersNode/$uid').remove();
+      debugPrint('DatabaseService: Deleted user node for UID: $uid');
+    } catch (e) {
+      debugPrint('DatabaseService: deleteUserData error: $e');
+      throw Exception('Gagal menghapus data pengguna di database.');
+    }
+  }
 }

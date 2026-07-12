@@ -131,4 +131,9 @@ class DatabaseRepository {
   Future<Map<String, dynamic>> exportUserData(String uid) async {
     return await _dbService.exportUserData(uid);
   }
+
+  /// Permanently deletes all user data from Realtime Database.
+  Future<void> deleteUserData(String uid) async {
+    await _dbService.deleteUserData(uid);
+  }
 }

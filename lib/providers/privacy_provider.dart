@@ -117,34 +117,23 @@ class PrivacyProvider extends ChangeNotifier {
   }
 
   // ─── Download data ─────────────────────────────────────────────────────────
-  Future<void> downloadUserData() async {
-    if (_activeUid == null) return;
+  Future<Map<String, dynamic>?> prepareUserDataExport() async {
+    if (_activeUid == null) return null;
     _isSavingData = true;
     _errorMessage = null;
     _successMessage = null;
     notifyListeners();
-
     try {
       final data = await _dbRepository.exportUserData(_activeUid!);
-      final jsonString = const JsonEncoder.withIndent('  ').convert(data);
-      final fileName = 'diacare_data_${DateTime.now().millisecondsSinceEpoch}.json';
-
-      await saveJsonFile(
-        jsonString,
-        fileName,
-        onSuccess: (path) {
-          _successMessage = 'Data berhasil diekspor/disimpan:\n$path';
-        },
-        onError: (error) {
-          _errorMessage = 'Gagal menyimpan file: $error';
-        },
-      );
+      _isSavingData = false;
+      notifyListeners();
+      return data;
     } catch (e) {
-      _errorMessage = 'Gagal mengunduh data: $e';
+      _errorMessage = e.toString();
+      _isSavingData = false;
+      notifyListeners();
+      return null;
     }
-
-    _isSavingData = false;
-    notifyListeners();
   }
 
   // ─── Clear history ──────────────────────────────────────────────────────────

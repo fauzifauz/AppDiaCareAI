@@ -1,5 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import '../../theme/app_theme.dart';
@@ -222,6 +227,21 @@ class PrivacyDataScreen extends StatelessWidget {
                   subtitle: 'Hapus sensor data, prediksi & log aktivitas',
                   isLoading: false,
                 ),
+                const SizedBox(height: 12),
+
+                // Delete Account Button
+                _buildActionButton(
+                  onTap: authProvider.isLoading
+                      ? null
+                      : () => _showDeleteAccountConfirmation(context, authProvider),
+                  icon: Icons.delete_forever_rounded,
+                  iconColor: const Color(0xFFDC2626),
+                  bgColor: const Color(0xFFFFF1F1),
+                  borderColor: const Color(0xFFDC2626).withOpacity(0.2),
+                  title: 'Hapus Akun DiaCareAI',
+                  subtitle: 'Hapus seluruh data profil dan akun permanen',
+                  isLoading: authProvider.isLoading,
+                ),
                 const SizedBox(height: 24),
 
                 // Info box
@@ -241,7 +261,7 @@ class PrivacyDataScreen extends StatelessWidget {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Data yang dihapus tidak dapat dipulihkan kembali. Unduh data Anda terlebih dahulu sebelum menghapus riwayat.',
+                          'Data yang dihapus tidak dapat dipulihkan kembali. Unduh data Anda terlebih dahulu sebelum menghapus riwayat atau akun.',
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             color: const Color(0xFF92400E),
@@ -261,25 +281,290 @@ class PrivacyDataScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _showDeleteAccountConfirmation(
+      BuildContext context, AuthProvider authProvider) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                color: Color(0xFFFEF2F2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.warning_amber_rounded,
+                  color: Color(0xFFEF4444), size: 22),
+            ),
+            const SizedBox(width: 12),
+            Text('Hapus Akun Permanen',
+                style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w800, fontSize: 16)),
+          ],
+        ),
+        content: Text(
+          'Tindakan ini tidak dapat dibatalkan. Seluruh data profil, riwayat medis, data sensor, dan akun Anda akan dihapus secara permanen dari server DiaCareAI.\n\nApakah Anda yakin ingin melanjutkan?',
+          style:
+              GoogleFonts.inter(color: AppTheme.textGrey, height: 1.5, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Batal',
+                style: GoogleFonts.inter(
+                    color: AppTheme.textGrey, fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              elevation: 0,
+            ),
+            child: Text('Hapus Akun',
+                style: GoogleFonts.inter(
+                    color: Colors.white, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      final success = await authProvider.deleteAccount();
+      if (!context.mounted) return;
+      if (success) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Akun Anda berhasil dihapus secara permanen.',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: AppTheme.accentGreen,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              authProvider.errorMessage ?? 'Gagal menghapus akun.',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: const Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _downloadData(
       BuildContext context, PrivacyProvider provider) async {
-    await provider.downloadUserData();
-    if (!context.mounted) return;
-    final msg = provider.successMessage ?? provider.errorMessage;
-    if (msg != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(msg,
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: provider.successMessage != null
-              ? AppTheme.accentGreen
-              : const Color(0xFFEF4444),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          duration: const Duration(seconds: 4),
+    final data = await provider.prepareUserDataExport();
+    if (data == null) {
+      if (!context.mounted) return;
+      final errorMsg = provider.errorMessage ?? 'Gagal memproses ekspor data.';
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.error_outline_rounded, color: Colors.red, size: 28),
+              const SizedBox(width: 10),
+              Text('Unduh Gagal', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Text(
+            errorMsg,
+            style: GoogleFonts.inter(fontSize: 14),
+          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('OK', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
+            ),
+          ],
         ),
       );
-      provider.clearMessages();
+      return;
+    }
+
+    try {
+      final jsonString = const JsonEncoder.withIndent('  ').convert(data);
+      final now = DateTime.now();
+      final formattedDate = "${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}";
+      final fileName = "DiaCareAI_Data_Diri_$formattedDate.json";
+
+      List<String> pathsToTry = [];
+
+      // 1. Try public Download directories on Android
+      if (!kIsWeb && Platform.isAndroid) {
+        pathsToTry.addAll([
+          '/storage/emulated/0/Download/$fileName',
+          '/sdcard/Download/$fileName',
+        ]);
+      }
+
+      // 2. Try external storage directories
+      try {
+        final extDir = await getExternalStorageDirectory();
+        if (extDir != null) {
+          pathsToTry.add('${extDir.path}/$fileName');
+          pathsToTry.add('${extDir.path}/Download/$fileName');
+        }
+      } catch (_) {}
+
+      // 3. Try app documents directory as fallback
+      try {
+        final docDir = await getApplicationDocumentsDirectory();
+        pathsToTry.add('${docDir.path}/$fileName');
+      } catch (_) {}
+
+      File? savedFile;
+      String? lastError;
+
+      for (final path in pathsToTry) {
+        try {
+          final file = File(path);
+          final parentDir = file.parent;
+          if (!await parentDir.exists()) {
+            await parentDir.create(recursive: true);
+          }
+          await file.writeAsString(jsonString);
+          savedFile = file;
+          break; // Successfully saved!
+        } catch (e) {
+          lastError = e.toString();
+          debugPrint('Failed to save JSON to $path: $e');
+        }
+      }
+
+      final jsonBytes = utf8.encode(jsonString);
+
+      // Fallback if local direct save completely failed but we still have data
+      if (savedFile == null) {
+        debugPrint('Direct file saving failed: $lastError. Falling back to share sheet.');
+        await Printing.sharePdf(
+          bytes: jsonBytes,
+          filename: fileName,
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Data diri siap dibagikan/disimpan dengan nama: $fileName'),
+              backgroundColor: AppTheme.primaryBlue,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Show beautiful success dialog
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.check_circle_outline_rounded, color: Color(0xFF16A34A), size: 28),
+                const SizedBox(width: 10),
+                Text('Unduh Berhasil', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Data diri Anda (format JSON) telah berhasil diunduh dan disimpan langsung ke penyimpanan perangkat Anda:',
+                  style: GoogleFonts.inter(fontSize: 14),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: Text(
+                    savedFile!.path,
+                    style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textDark, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Anda dapat membuka, membagikan, memindahkan, atau mengimpor file data ini menggunakan aplikasi lain.',
+                  style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textGrey),
+                ),
+              ],
+            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: Text('Tutup', style: GoogleFonts.inter(color: AppTheme.textGrey, fontWeight: FontWeight.w600)),
+              ),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await Printing.sharePdf(
+                    bytes: jsonBytes,
+                    filename: fileName,
+                  );
+                },
+                icon: const Icon(Icons.share_rounded, size: 18, color: Colors.white),
+                label: Text('Buka / Bagikan', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryBlue,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.red, size: 28),
+                const SizedBox(width: 10),
+                Text('Unduh Gagal', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Text(
+              'Gagal mengunduh atau menyimpan data diri: $e\n\nPastikan aplikasi memiliki izin penyimpanan yang memadai.',
+              style: GoogleFonts.inter(fontSize: 14),
+            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('OK', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
+              ),
+            ],
+          ),
+        );
+      }
     }
   }
 

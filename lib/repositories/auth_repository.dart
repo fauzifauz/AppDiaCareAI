@@ -168,4 +168,9 @@ class AuthRepository {
   Future<void> unenrollMfa(String factorId) async {
     await _authService.unenrollMfa(factorId);
   }
+
+  /// Permanently deletes the current Firebase Auth account.
+  Future<void> deleteAccount() async {
+    await _authService.deleteAccount();
+  }
 }

@@ -1359,7 +1359,6 @@ class _HomeContentState extends State<_HomeContent>
                 const SizedBox(height: 24),
                 FadeTransition(opacity: _animation, child: SlideTransition(position: Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(_animation), child: _buildQuickActionMenu())),
                 const SizedBox(height: 24),
-                
                 StreamBuilder<SensorData>(
                   stream: _sensorService.getSensorDataStream(),
                   builder: (context, snapshot) {
@@ -1372,10 +1371,16 @@ class _HomeContentState extends State<_HomeContent>
                     }
                     
                     final sensorData = snapshot.data ?? SensorData.initial();
+                    // Empty when: Firebase node doesn't exist yet (snapshot.data == null)
+                    // OR data exists but has no timestamp (never been written by IoT/simulation)
+                    final isSensorEmpty = snapshot.data == null ||
+                        (sensorData.glucose == 0 && sensorData.timestamp.isEmpty);
 
                     // Throttled save of sensor history to RTDB (respects privacy settings)
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      _maybeSaveSensorData(sensorData);
+                      if (!isSensorEmpty) {
+                        _maybeSaveSensorData(sensorData);
+                      }
                     });
                     
                     return Column(
@@ -1404,9 +1409,15 @@ class _HomeContentState extends State<_HomeContent>
                           child: _buildMedicalSummaryCard(healthProvider),
                         ),
                         const SizedBox(height: 24),
-                        FadeTransition(opacity: _animation, child: _buildRecentActivitySection(sensorData, healthProvider)),
+                        FadeTransition(
+                          opacity: _animation,
+                          child: _buildRecentActivitySection(sensorData, healthProvider),
+                        ),
                         const SizedBox(height: 24),
-                        FadeTransition(opacity: _animation, child: _buildAIRecommendationsCard(sensorData, healthProvider)),
+                        FadeTransition(
+                          opacity: _animation,
+                          child: _buildAIRecommendationsCard(sensorData, healthProvider),
+                        ),
                       ],
                     );
                   },
@@ -1694,6 +1705,85 @@ class _HomeContentState extends State<_HomeContent>
           ),
         ),
         const SizedBox(width: 8),
+        if (data.glucose == 0) ...[
+          GestureDetector(
+            onTap: () {
+              _sensorService.startSimulation();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFF10B981).withOpacity(0.15),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.play_arrow_rounded,
+                    size: 14,
+                    color: Color(0xFF10B981),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Simulasi',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF10B981),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ] else if (data.glucose > 0 && data.timestamp.isNotEmpty) ...[
+          GestureDetector(
+            onTap: () {
+              _sensorService.stopSimulation();
+              // Reset values back to 0.0
+              _sensorService.updateSensorData(
+                temperature: 0.0,
+                humidity: 0.0,
+                glucose: 0.0,
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFFEF4444).withOpacity(0.15),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.stop_rounded,
+                    size: 14,
+                    color: Color(0xFFEF4444),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Stop',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFFEF4444),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
         GestureDetector(
           onTap: () => _showManualInputDialog(),
           child: Container(
@@ -1727,6 +1817,83 @@ class _HomeContentState extends State<_HomeContent>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildEmptySensorState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppTheme.borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryBlue.withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.sensors_off_rounded,
+              color: AppTheme.primaryBlue,
+              size: 40,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'Pemantauan Harian Kosong',
+            style: GoogleFonts.inter(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.textDark,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Belum ada data sensor masuk. Hubungkan perangkat sensor DiaCare atau jalankan simulasi data melalui tombol di bawah untuk mulai memantau metrik kesehatan Anda.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: AppTheme.textGrey,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () {
+                  _sensorService.startSimulation();
+                },
+                icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                label: const Text('Simulasikan Sensor IoT'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryBlue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  elevation: 0,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -2322,11 +2489,11 @@ class _HomeContentState extends State<_HomeContent>
 
   Widget _buildRiskCard(SensorData data) {
     double riskProgress = 0.0;
-    String riskLabel = 'Tidak Ada Data';
-    Color riskColor = AppTheme.textGrey;
-    Color badgeBgColor = AppTheme.borderColor;
-    Color badgeTextColor = AppTheme.textGrey;
-    IconData badgeIcon = Icons.help_outline_rounded;
+    String riskLabel = 'Risiko Rendah';
+    Color riskColor = const Color(0xFF16A34A);
+    Color badgeBgColor = const Color(0xFFDCFCE7);
+    Color badgeTextColor = const Color(0xFF166534);
+    IconData badgeIcon = Icons.check_circle_rounded;
 
     if (data.glucose > 0) {
       if (data.glucose <= 100) {
@@ -2383,8 +2550,8 @@ class _HomeContentState extends State<_HomeContent>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      data.glucose > 0 ? '${(riskProgress * 100).toInt()}%' : '--%', 
-                      style: GoogleFonts.inter(fontSize: 34, fontWeight: FontWeight.w900, color: data.glucose > 0 ? riskColor : AppTheme.textGrey, letterSpacing: -1)
+                      data.glucose > 0 ? '${(riskProgress * 100).toInt()}%' : '0%', 
+                      style: GoogleFonts.inter(fontSize: 34, fontWeight: FontWeight.w900, color: riskColor, letterSpacing: -1)
                     ),
                     Text('TINGKAT RISIKO', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.textGrey, letterSpacing: 1.2)),
                   ],
@@ -2420,10 +2587,10 @@ class _HomeContentState extends State<_HomeContent>
             icon: Icons.water_drop_outlined, 
             iconColor: const Color(0xFF2563EB), 
             label: 'Gula Darah', 
-            value: data.glucose > 0 ? data.glucose.toStringAsFixed(0) : '--', 
+            value: data.glucose > 0 ? data.glucose.toStringAsFixed(0) : '0', 
             unit: 'mg/dL', 
-            trend: data.glucose > 0 ? data.glucoseStatus.replaceAll(' (Optimal)', '').replaceAll(' (Hipoglikemia)', '').replaceAll(' (Prediabetes)', '').replaceAll(' (Diabetes)', '') : 'N/A', 
-            isPositive: data.glucose >= 70 && data.glucose <= 140
+            trend: data.glucose > 0 ? data.glucoseStatus.replaceAll(' (Optimal)', '').replaceAll(' (Hipoglikemia)', '').replaceAll(' (Prediabetes)', '').replaceAll(' (Diabetes)', '') : 'Normal', 
+            isPositive: data.glucose > 0 ? (data.glucose >= 70 && data.glucose <= 140) : true
           ),
         ),
         const SizedBox(width: 8),
@@ -2432,10 +2599,10 @@ class _HomeContentState extends State<_HomeContent>
             icon: Icons.thermostat_rounded, 
             iconColor: const Color(0xFFF59E0B), 
             label: 'Suhu Tubuh', 
-            value: data.temperature > 0 ? data.temperature.toStringAsFixed(1) : '--', 
+            value: data.temperature > 0 ? data.temperature.toStringAsFixed(1) : '0.0', 
             unit: '°C', 
-            trend: data.isTemperatureSafe ? 'Normal' : 'Abnormal', 
-            isPositive: data.isTemperatureSafe
+            trend: data.temperature > 0 ? (data.isTemperatureSafe ? 'Normal' : 'Abnormal') : 'Normal', 
+            isPositive: data.temperature > 0 ? data.isTemperatureSafe : true
           ),
         ),
         const SizedBox(width: 8),
@@ -2444,10 +2611,10 @@ class _HomeContentState extends State<_HomeContent>
             icon: Icons.water_drop_rounded, 
             iconColor: const Color(0xFF06B6D4), 
             label: 'Kelembaban', 
-            value: data.humidity > 0 ? data.humidity.toStringAsFixed(0) : '--', 
+            value: data.humidity > 0 ? data.humidity.toStringAsFixed(0) : '0', 
             unit: '%', 
-            trend: data.isHumiditySafe ? 'Ideal' : 'Kering', 
-            isPositive: data.isHumiditySafe
+            trend: data.humidity > 0 ? (data.isHumiditySafe ? 'Ideal' : 'Kering') : 'Ideal', 
+            isPositive: data.humidity > 0 ? data.isHumiditySafe : true
           ),
         ),
       ],
@@ -2522,13 +2689,15 @@ class _HomeContentState extends State<_HomeContent>
   Widget _buildRecentActivitySection(SensorData data, HealthProvider provider) {
     final String liveTime = data.timestamp.isNotEmpty 
       ? _formatTimestamp(data.timestamp).replaceAll('Aktif: ', '') 
-      : '--:--';
-    final Color liveStatusColor = data.glucose >= 70 && data.glucose <= 140 
-      ? const Color(0xFF22C55E) 
-      : (data.glucose <= 200 ? AppTheme.primaryBlue : const Color(0xFFEF4444));
+      : '00:00';
+    final Color liveStatusColor = data.glucose > 0 
+      ? (data.glucose >= 70 && data.glucose <= 140 
+          ? const Color(0xFF22C55E) 
+          : (data.glucose <= 200 ? AppTheme.primaryBlue : const Color(0xFFEF4444)))
+      : const Color(0xFF22C55E);
     final String liveStatusLabel = data.glucose > 0 
       ? data.glucoseStatus.replaceAll(' (Optimal)', '').replaceAll(' (Hipoglikemia)', '').replaceAll(' (Prediabetes)', '').replaceAll(' (Diabetes)', '') 
-      : 'N/A';
+      : 'Normal';
 
     final recentRecords = provider.records.take(2).toList();
 
@@ -2550,7 +2719,7 @@ class _HomeContentState extends State<_HomeContent>
             children: [
               _buildTimelineItem(
                 time: '$liveTime WIB', 
-                glucose: data.glucose > 0 ? '${data.glucose.toInt()} mg/dL' : '-- mg/dL', 
+                glucose: data.glucose > 0 ? '${data.glucose.toInt()} mg/dL' : '0 mg/dL', 
                 type: 'Glukosa Real-Time (Sensor IoT)', 
                 statusColor: liveStatusColor, 
                 statusLabel: liveStatusLabel, 

@@ -95,6 +95,32 @@ class AuthService {
     }
   }
 
+  /// Permanently deletes the current user's Firebase Auth account.
+  /// The caller is responsible for deleting Realtime Database data first.
+  Future<void> deleteAccount() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('Pengguna tidak ditemukan.');
+
+      // Revoke Google Sign-In session (only on mobile; web requires clientId setup)
+      if (!kIsWeb) {
+        try {
+          await _googleSignIn.signOut();
+        } catch (e) {
+          // Non-fatal: ignore if Google session cannot be revoked
+          debugPrint('AuthService: Google signOut during delete (non-fatal): $e');
+        }
+      }
+
+      await user.delete();
+    } on FirebaseAuthException catch (e) {
+      debugPrint('AuthService: deleteAccount error [${e.code}] - ${e.message}');
+      throw _parseAuthException(e);
+    } catch (e) {
+      throw Exception('Gagal menghapus akun: $e');
+    }
+  }
+
   /// Sends an account verification email.
   Future<void> sendEmailVerification() async {
     try {

@@ -312,6 +312,33 @@ class AuthProvider extends ChangeNotifier {
     await _authRepository.signOut();
   }
 
+  /// Permanently deletes the current user account and all associated data.
+  /// Removes RTDB user node, then deletes Firebase Auth account.
+  Future<bool> deleteAccount() async {
+    _clearError();
+    _setLoading(true);
+    final uid = _firebaseUser?.uid;
+    if (uid == null) {
+      _errorMessage = 'Pengguna tidak ditemukan.';
+      _setLoading(false);
+      return false;
+    }
+    try {
+      // 1. Delete all user data from Realtime Database
+      await _dbRepository.deleteUserData(uid);
+
+      // 2. Delete Firebase Auth account
+      await _authRepository.deleteAccount();
+
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _setLoading(false);
+      return false;
+    }
+  }
+
   /// Updates the user email address.
   /// Sends a verification email to the new address and registers log activity.
   Future<bool> updateEmail(String newEmail) async {

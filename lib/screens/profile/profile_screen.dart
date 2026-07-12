@@ -35,6 +35,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  Future<ImageSource?> _showImageSourceDialog(BuildContext context) async {
+    return await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE2E8F0),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'Pilih Sumber Foto',
+              style: GoogleFonts.inter(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.textDark,
+              ),
+            ),
+            const SizedBox(height: 18),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.camera_alt_rounded, color: AppTheme.primaryBlue),
+              ),
+              title: Text('Kamera',
+                  style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textDark)),
+              subtitle: Text('Ambil foto langsung dengan kamera',
+                  style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppTheme.textGrey)),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.photo_library_rounded, color: AppTheme.primaryBlue),
+              ),
+              title: Text('Galeri',
+                  style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textDark)),
+              subtitle: Text('Pilih foto dari penyimpanan galeri',
+                  style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppTheme.textGrey)),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showEditProfileSheet(UserModel profile) {
     final nameController = TextEditingController(text: profile.fullName);
     final ageController = TextEditingController(text: profile.age.toString());
@@ -94,8 +176,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         GestureDetector(
                           onTap: () async {
                             try {
+                              final source = await _showImageSourceDialog(context);
+                              if (source == null) return;
                               final XFile? image = await _picker.pickImage(
-                                source: ImageSource.gallery,
+                                source: source,
                                 maxWidth: 512,
                                 maxHeight: 512,
                                 imageQuality: 85,
@@ -166,7 +250,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
-                                  Icons.photo_library_rounded,
+                                  Icons.add_a_photo_rounded,
                                   color: Colors.white,
                                   size: 16,
                                 ),
@@ -176,7 +260,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'Ketuk untuk memilih foto dari galeri',
+                          'Ketuk untuk mengubah foto profil',
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,

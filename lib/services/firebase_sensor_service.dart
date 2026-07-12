@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import '../models/sensor_data.dart';
@@ -6,13 +7,19 @@ import '../models/sensor_data.dart';
 class FirebaseSensorService {
   final FirebaseDatabase _database = FirebaseDatabase.instance;
   
-  // Node path inside Firebase Realtime Database
-  static const String _sensorPath = 'sensor_data';
+  // Node path helper inside Firebase Realtime Database
+  String _getSensorPath() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid.isEmpty) {
+      return 'sensor_data/anonymous';
+    }
+    return 'users/$uid/sensor_data';
+  }
 
   /// Stream of [SensorData] changes in real-time.
   /// Listeners will automatically receive new values when database changes.
   Stream<SensorData> getSensorDataStream() {
-    return _database.ref(_sensorPath).onValue.map((event) {
+    return _database.ref(_getSensorPath()).onValue.map((event) {
       final snapshot = event.snapshot;
       if (snapshot.value == null) {
         debugPrint('FirebaseSensorService: Database snapshot is null or empty.');
@@ -49,7 +56,7 @@ class FirebaseSensorService {
         'timestamp': DateTime.now().toIso8601String(),
       };
       
-      await _database.ref(_sensorPath).update(update);
+      await _database.ref(_getSensorPath()).update(update);
       debugPrint('FirebaseSensorService: Sensor data updated successfully: $update');
     } catch (e) {
       debugPrint('FirebaseSensorService: Error writing sensor data: $e');
